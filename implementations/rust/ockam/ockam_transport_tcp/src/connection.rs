@@ -1,3 +1,4 @@
+use crate::error::Error;
 use crate::traits::Connection;
 use async_trait::async_trait;
 use std::net::SocketAddr;
@@ -21,28 +22,39 @@ impl TcpConnection {
             stream: None,
         }))
     }
-    pub async fn new_from_stream(stream: TcpStream) -> Arc<Mutex<Self>> {
-        Arc::new(Mutex::new(TcpConnection {
-            remote_address: stream.peer_addr().unwrap(),
-            _blocking: true,
-            stream: Some(stream),
-        }))
+    pub async fn new_from_stream(stream: TcpStream) -> Result<Arc<Mutex<Self>>, Error> {
+        match stream.peer_addr() {
+            Ok(peer) => Ok(Arc::new(Mutex::new(TcpConnection {
+                remote_address: peer,
+                _blocking: true,
+                stream: Some(stream),
+            }))),
+            Err(_) => Err(Error::PeerNotFound.into()),
+        }
     }
 }
 
 #[async_trait]
 impl Connection for TcpConnection {
-    async fn connect(&mut self) -> Result<(), String> {
-        self.stream = Some(TcpStream::connect(self.remote_address).await.unwrap());
-        Ok(())
+    async fn connect(&mut self) -> Result<(), Error> {
+        match self.stream {
+            Some(_) => Err(Error::AlreadyConnected.into()),
+            None => match TcpStream::connect(self.remote_address).await {
+                Ok(s) => {
+                    self.stream = Some(s);
+                    Ok(())
+                }
+                Err(_) => Err(Error::ConnectFailed.into()),
+            },
+        }
     }
 
-    async fn send(&mut self, buff: &[u8]) -> Result<usize, String> {
+    async fn send(&mut self, buff: &[u8]) -> Result<usize, Error> {
         let mut i = 0;
         return if let Some(stream) = &self.stream {
             loop {
                 if std::result::Result::is_err(&stream.writable().await) {
-                    return Err("Can't send, check connection".into());
+                    return Err(Error::CheckConnection.into());
                 }
                 match stream.try_write(&buff[i..]) {
                     Ok(n) if n == buff.len() => {
@@ -56,20 +68,20 @@ impl Connection for TcpConnection {
                         continue;
                     }
                     Err(_) => {
-                        return Err("write error".into());
+                        return Err(Error::CheckConnection.into());
                     }
                 }
             }
         } else {
-            Err("not connected".into())
+            Err(Error::NotConnected.into())
         };
     }
 
-    async fn receive(&mut self, buff: &mut [u8]) -> Result<usize, String> {
+    async fn receive(&mut self, buff: &mut [u8]) -> Result<usize, Error> {
         if let Some(stream) = &self.stream {
             loop {
                 if std::result::Result::is_err(&stream.readable().await) {
-                    return Err("can't receive, check connection".into());
+                    return Err(Error::CheckConnection.into());
                 }
                 match stream.try_read(buff) {
                     Ok(n) => {
@@ -79,12 +91,12 @@ impl Connection for TcpConnection {
                         continue;
                     }
                     _ => {
-                        return Err("receive failed".into());
+                        return Err(Error::ReceiveFailed.into());
                     }
                 }
             }
         } else {
-            Err("not connected".into())
+            Err(Error::CheckConnection.into())
         }
     }
 }

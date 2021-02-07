@@ -1,4 +1,5 @@
 use crate::connection::TcpConnection;
+use crate::error::Error;
 use crate::traits::{Connection, Listener};
 use async_trait::async_trait;
 use std::sync::Arc;
@@ -12,24 +13,24 @@ pub struct TcpListener {
 impl TcpListener {
     pub async fn create(
         listen_address: std::net::SocketAddr,
-    ) -> Result<Arc<Mutex<dyn Listener + Send>>, String> {
+    ) -> Result<Arc<Mutex<dyn Listener + Send>>, Error> {
         let listener = TokioTcpListener::bind(listen_address).await;
         match listener {
             Ok(l) => Ok(Arc::new(Mutex::new(TcpListener { listener: l }))),
-            Err(e) => Err(format!("{:?}", e)),
+            Err(_) => Err(Error::Bind.into()),
         }
     }
 }
 
 #[async_trait]
 impl Listener for TcpListener {
-    async fn accept(&mut self) -> Result<Arc<Mutex<dyn Connection + Send>>, String> {
+    async fn accept(&mut self) -> Result<Arc<Mutex<dyn Connection + Send>>, Error> {
         let stream = self.listener.accept().await;
         if stream.is_err() {
-            Err("accept failed".into())
+            Err(Error::Accept.into())
         } else {
             let (stream, _) = stream.unwrap();
-            Ok(TcpConnection::new_from_stream(stream).await)
+            Ok(TcpConnection::new_from_stream(stream).await?)
         }
     }
 }
