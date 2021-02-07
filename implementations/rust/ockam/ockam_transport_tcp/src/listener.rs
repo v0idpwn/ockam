@@ -24,8 +24,7 @@ impl TcpListener {
 #[async_trait]
 impl Listener for TcpListener {
     async fn accept(&mut self) -> Result<Arc<Mutex<dyn Connection + Send>>, String> {
-        let listener = self.listener.lock().await;
-        let stream = listener.accept().await;
+        let stream = self.listener.accept().await;
         if stream.is_err() {
             Err("accept failed".into())
         } else {

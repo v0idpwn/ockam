@@ -10,7 +10,7 @@ use tokio::sync::Mutex;
 pub struct TcpConnection {
     remote_address: std::net::SocketAddr,
     _blocking: bool,
-    stream: Option<Arc<Mutex<TcpStream>>>,
+    stream: Option<TcpStream>,
 }
 
 impl TcpConnection {
@@ -25,7 +25,7 @@ impl TcpConnection {
         Arc::new(Mutex::new(TcpConnection {
             remote_address: stream.peer_addr().unwrap(),
             _blocking: true,
-            stream: Some(Arc::new(Mutex::new(stream))),
+            stream: Some(stream),
         }))
     }
 }
@@ -40,7 +40,6 @@ impl Connection for TcpConnection {
     async fn send(&mut self, buff: &[u8]) -> Result<usize, String> {
         let mut i = 0;
         return if let Some(stream) = &self.stream {
-            let stream = stream.lock().await;
             loop {
                 if std::result::Result::is_err(&stream.writable().await) {
                     return Err("Can't send, check connection".into());
@@ -68,7 +67,6 @@ impl Connection for TcpConnection {
 
     async fn receive(&mut self, buff: &mut [u8]) -> Result<usize, String> {
         if let Some(stream) = &self.stream {
-            let stream = stream.lock().await;
             loop {
                 if std::result::Result::is_err(&stream.readable().await) {
                     return Err("can't receive, check connection".into());
