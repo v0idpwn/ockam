@@ -15,37 +15,28 @@
 //! The `Relay` is then responsible for turning the message back into
 //! a type and notifying the companion actor.
 
-use crate::Context;
-use ockam_core::{Encoded, Message, Result, Worker};
-use std::marker::PhantomData;
+use crate::{EnvelopeProxy, Context};
+use ockam_core::{Encoded, Result, Worker};
 use tokio::runtime::Runtime;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
 
 pub type RelayMessage = Encoded;
 
-pub struct Relay<W, M>
+pub struct Relay<W>
 where
     W: Worker<Context = Context>,
-    M: Message,
 {
     rx: Receiver<RelayMessage>,
     worker: W,
     ctx: Context,
-    _msg: PhantomData<M>,
 }
 
-impl<W, M> Relay<W, M>
+impl<W> Relay<W>
 where
-    W: Worker<Context = Context, Message = M>,
-    M: Message + Send + 'static,
+    W: Worker<Context = Context>,
 {
     pub fn new(rx: Receiver<RelayMessage>, worker: W, ctx: Context) -> Self {
-        Self {
-            rx,
-            worker,
-            ctx,
-            _msg: PhantomData,
-        }
+        Self { rx, worker, ctx }
     }
 
     /// A wrapper function around the lifetime of a worker
@@ -54,12 +45,9 @@ where
 
         // Loop until the last sender disappears
         while let Some(ref enc) = self.rx.recv().await {
-            let msg = match M::decode(enc) {
-                Ok(msg) => msg,
-                _ => continue,
-            };
+            let mut msg = crate::envelope::take::<W>(enc);
 
-            self.worker.handle_message(&mut self.ctx, msg).await?;
+            msg.handle(&mut self.worker, &mut self.ctx).await;
         }
 
         // Errors that occur during shut-down should be logged, but
@@ -91,13 +79,12 @@ where
 }
 
 /// Build and spawn a new worker relay, returning a send handle to it
-pub(crate) fn build<W, M>(rt: &Runtime, worker: W, ctx: Context) -> Sender<RelayMessage>
+pub(crate) fn build<W>(rt: &Runtime, worker: W, ctx: Context) -> Sender<RelayMessage>
 where
-    W: Worker<Context = Context, Message = M>,
-    M: Message + Send + 'static,
+    W: Worker<Context = Context>,
 {
     let (tx, rx) = channel(32);
-    let relay = Relay::<W, M>::new(rx, worker, ctx);
+    let relay = Relay::<W>::new(rx, worker, ctx);
     rt.spawn(relay.run());
     tx
 }

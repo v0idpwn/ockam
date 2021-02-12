@@ -1,5 +1,5 @@
 use crate::{error::Error, relay, Context, NodeMessage, NodeReply};
-use ockam_core::{Address, Message, Result, Worker};
+use ockam_core::{Address, Handler, Message, Result, Worker};
 
 use std::sync::Arc;
 use tokio::runtime::Runtime;
@@ -44,11 +44,10 @@ impl Node {
     }
 
     /// Create and start the handler at [`Address`](ockam_core::Address).
-    pub async fn start_worker<S, W, M>(&self, address: S, worker: W) -> Result<()>
+    pub async fn start_worker<S, W>(&self, address: S, worker: W) -> Result<()>
     where
         S: ToString,
-        W: Worker<Context = Context, Message = M>,
-        M: Message + Send + 'static,
+        W: Worker<Context = Context>,
     {
         let address = address.to_string();
         let ctx = Context::new(self.clone(), address.clone());
@@ -78,9 +77,10 @@ impl Node {
     }
 
     /// Send a message to a particular worker
-    pub async fn send_message<S, M>(&self, address: S, msg: M) -> Result<()>
+    pub async fn send_message<W, S, M>(&self, address: S, msg: M) -> Result<()>
     where
         S: ToString,
+        W: Handler<M>,
         M: Message + Send + 'static,
     {
         let address = address.to_string();
@@ -90,7 +90,7 @@ impl Node {
         match self.sender.send(req).await {
             Ok(()) => {
                 if let Some(NodeReply::Sender(_, s)) = reply_rx.recv().await {
-                    let msg = msg.encode()?;
+                    let msg = crate::envelope::make::<W, M>(msg);
                     match s.send(msg).await {
                         Ok(()) => Ok(()),
                         Err(_e) => Err(Error::FailedSendMessage.into()),

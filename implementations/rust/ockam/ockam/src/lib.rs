@@ -26,4 +26,4 @@ pub use contacts::*;
 mod error;
 pub use error::*;
 
-pub use ockam_core::{Address, Encoded, Error, Message, Result, Worker};
+pub use ockam_core::{Address, Encoded, Error, Handler, Message, Result, Worker};

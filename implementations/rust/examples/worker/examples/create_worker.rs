@@ -1,5 +1,6 @@
-use ockam::{Context, Message, Result, Worker};
+use ockam::{Context, Handler, Message, Result, Worker};
 use serde::{Deserialize, Serialize};
+use async_trait::async_trait;
 
 struct Printer;
 
@@ -8,19 +9,20 @@ struct PrintMessage(String);
 
 impl Message for PrintMessage {}
 
-#[async_trait::async_trait]
+#[async_trait]
 impl Worker for Printer {
-    type Message = PrintMessage;
     type Context = Context;
 
     fn initialize(&mut self, _context: &mut Self::Context) -> Result<()> {
         println!("Printer starting");
         Ok(())
     }
+}
 
-    async fn handle_message(&mut self, _context: &mut Context, msg: PrintMessage) -> Result<()> {
-        println!("{}", msg.0);
-        Ok(())
+#[async_trait]
+impl Handler<PrintMessage> for Printer {
+    async fn handle(&mut self, msg: PrintMessage, _ctx: &mut Context) {
+        println!("PRINTER: {}", msg.0);
     }
 }
 
@@ -31,14 +33,18 @@ fn main() {
         let node = ctx.node();
 
         node.start_worker("printer", Printer {}).await.unwrap();
-        node.send_message(
+
+        node.send_message::<Printer, _, _>(
             "printer",
             PrintMessage {
-                0: "hi".to_string(),
+                0: "Hello printer worker".to_string(),
             },
         )
         .await
         .unwrap();
+
+        // RACE CONDITION: Because this call is so soon after,
+        // sometimes the worker is killed before the msg reaches it
         node.stop().await.unwrap();
     })
     .unwrap();

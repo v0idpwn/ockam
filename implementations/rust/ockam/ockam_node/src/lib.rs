@@ -11,12 +11,14 @@
 
 mod context;
 mod error;
+mod envelope;
 mod executor;
 mod messages;
 mod node;
 mod relay;
 
 pub use context::*;
+pub use envelope::*;
 pub use executor::*;
 pub use messages::*;
 pub use node::*;
