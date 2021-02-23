@@ -24,6 +24,7 @@ std = []
 
 [dependencies]
 ockam = {path = "../ockam", version = "*"}
+ockam_core = {path = "../ockam_core", version = "*"}
 ockam_router = {path = "../ockam_router", version = "*"}
 ockam_transport = {path = "../ockam_transport", version = "*"}
 ockam_key_exchange_xx = {path = "../ockam_key_exchange_xx", version = "*"}
