@@ -1,0 +1,18 @@
+[package]
+name = "ockam_transport"
+version = "0.1.0"
+authors = ["robinbudd <robin@ockam.io>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+ockam = {path = "../../ockam/ockam", version = "*"}
+ockam_node = {path = "../../ockam/ockam_node", version = "*"}
+ockam_router = {path = "../ockam_router", version = "*"}
+serde_bare = "0.3.0"
+serde = {version = "1.0.120", features = ["derive"]}
+tokio = {version = "1.1.0", features = ["rt-multi-thread","sync","net","macros","time"]}
+async-trait = "0.1.42"
+futures = " 0.3.10"
+rand = "0.7"
