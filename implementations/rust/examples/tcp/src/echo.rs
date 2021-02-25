@@ -1,24 +1,24 @@
 use async_trait::async_trait;
 use ockam::Context;
 use ockam::Worker;
-use ockam_router::message::{RouteableAddress, RouterMessage};
+use ockam_router::message::{RouterAddress, RouterMessage, ROUTER_ADDRESS_LOCAL};
 use ockam_transport_tcp::Connection;
 use serde::{Deserialize, Serialize};
 
-pub struct Printer {
+pub struct Echo {
     pub connection: Box<dyn Connection>,
     pub count: usize,
 }
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
-pub enum PrinterMessage {
+pub enum EchoMessage {
     Send(Vec<u8>),
     Receive,
 }
 
 #[async_trait]
-impl Worker for Printer {
-    type Message = PrinterMessage;
+impl Worker for Echo {
+    type Message = EchoMessage;
     type Context = Context;
 
     fn initialize(&mut self, _context: &mut Self::Context) -> ockam::Result<()> {
@@ -35,12 +35,18 @@ impl Worker for Printer {
         msg: Self::Message,
     ) -> ockam::Result<()> {
         return match (msg) {
-            PrinterMessage::Send(text) => {
-                let mut reply = RouterMessage::new();
-                reply.onward_address(RouteableAddress::Local(b"printer".to_vec()));
-                reply.return_address(RouteableAddress::Local(b"printer".to_vec()));
-                reply.payload = text;
-                self.connection.send_message(reply).await?;
+            EchoMessage::Send(text) => {
+                let mut msg_out = RouterMessage::new();
+                msg_out.onward_route.addrs.push(RouterAddress {
+                    address_type: ROUTER_ADDRESS_LOCAL,
+                    address: b"echo_service".to_vec(),
+                });
+                msg_out.return_route.addrs.push(RouterAddress {
+                    address_type: ROUTER_ADDRESS_LOCAL,
+                    address: b"echo_service".to_vec(),
+                });
+                msg_out.payload = text;
+                self.connection.send_message(msg_out).await?;
                 println!("sent \"hello\"");
                 self.count += 1;
                 if self.count == 2 {
@@ -48,7 +54,7 @@ impl Worker for Printer {
                 }
                 Ok(())
             }
-            PrinterMessage::Receive => {
+            EchoMessage::Receive => {
                 let m = self.connection.receive_message().await?;
                 println!("received \"{}\"", String::from_utf8(m.payload).unwrap());
                 self.count += 1;
