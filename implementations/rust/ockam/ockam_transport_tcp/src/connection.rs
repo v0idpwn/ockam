@@ -135,6 +135,7 @@ impl Connection for TcpConnection {
                 msg.onward_route.addrs.remove(0);
             }
         }
+        msg.return_route.addrs.insert(0, self.get_local_address());
         return match serde_bare::to_vec::<RouterMessage>(&msg) {
             Ok(mut msg_vec) => {
                 if msg_vec.len() > MAX_MESSAGE_SIZE - 2 {
@@ -143,7 +144,6 @@ impl Connection for TcpConnection {
                 let len = msg_vec.len() as u16;
                 let mut msg_len_vec = len.to_be_bytes().to_vec();
                 msg_len_vec.append(&mut msg_vec);
-                println!("sent: {:?}", msg_len_vec[0..10].to_vec());
                 return self.send(&msg_len_vec).await;
             }
             Err(_) => Err(TransportError::IllFormedMessage.into()),
@@ -169,11 +169,6 @@ impl Connection for TcpConnection {
                 self.message_buff.remove(0);
             }
 
-            println!(
-                "message_length {} message_buff.len {}",
-                self.message_length,
-                self.message_buff.len()
-            );
             if self.message_length as usize <= self.message_buff.len() {
                 // we have a complete message
                 return match serde_bare::from_slice::<RouterMessage>(&self.message_buff) {
@@ -182,7 +177,6 @@ impl Connection for TcpConnection {
                         for i in 0..self.message_buff.len() - self.message_length {
                             self.message_buff[i] = self.message_buff[i + self.message_length];
                         }
-                        println!("{:?}", self.message_buff[0..10].to_vec());
                         self.message_buff
                             .truncate(self.message_buff.len() - self.message_length);
                         self.message_length = 0;
@@ -213,21 +207,9 @@ impl Connection for TcpConnection {
                             self.send_message(m).await?;
                             continue;
                         }
-                        println!("OK!");
-                        println!(
-                            "self.message_length {} self.message_buffer {:?}",
-                            self.message_length, self.message_buff
-                        );
                         Ok(m)
                     }
-                    Err(_) => {
-                        println!(
-                            "self.message_length {} self.message_buff {:?}",
-                            self.message_length,
-                            self.message_buff[0..32].to_vec()
-                        );
-                        Err(TransportError::IllFormedMessage.into())
-                    }
+                    Err(_) => Err(TransportError::IllFormedMessage.into()),
                 };
             }
         }
@@ -463,7 +445,6 @@ mod test {
 
         match connection.receive_message().await {
             Ok(m) => {
-                println!("{:?} {:?}", m.onward_route, m.return_route);
                 assert_eq!(
                     m,
                     RouterMessage {
@@ -569,8 +550,6 @@ mod test {
             let msg = msg.clone();
             match connection.receive_message().await {
                 Ok(m) => {
-                    println!("m  : {:?}", m);
-                    println!("msg: {:?}", msg);
                     assert_eq!(m, msg);
                 }
                 Err(e) => {

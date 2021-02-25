@@ -1,4 +1,5 @@
 use crate::message;
+use ockam::Address;
 use serde::{Deserialize, Serialize};
 use serde_bare::Uint;
 use std::net::SocketAddr;
@@ -28,6 +29,7 @@ pub const ROUTER_ADDRESS_TCP: Uint = serde_bare::Uint(1);
 pub enum RouteableAddress {
     Local(Vec<u8>),
     Tcp(SocketAddr),
+    Address(Address),
 }
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
@@ -35,6 +37,12 @@ pub enum RouteableAddress {
 pub struct RouterAddress {
     pub address_type: Uint,
     pub address: Vec<u8>,
+}
+
+impl From<Address> for RouteableAddress {
+    fn from(address: Address) -> Self {
+        RouteableAddress::Address(address)
+    }
 }
 
 impl From<RouteableAddress> for RouterAddress {
@@ -51,6 +59,10 @@ impl From<RouteableAddress> for RouterAddress {
                     address: serialized,
                 }
             }
+            RouteableAddress::Address(address) => RouterAddress {
+                address_type: ROUTER_ADDRESS_LOCAL,
+                address: address.to_vec(),
+            },
         }
     }
 }
@@ -80,10 +92,11 @@ impl RouterMessage {
         }
     }
     pub fn onward_address(&mut self, addr: RouteableAddress) {
+        println!("addr.intp(): {:?}", addr);
         self.onward_route.addrs.push(addr.into());
     }
     pub fn return_address(&mut self, addr: RouteableAddress) {
-        self.return_route.addrs.push(addr.into());
+        self.return_route.addrs.insert(0, addr.into());
     }
 }
 
@@ -249,5 +262,24 @@ mod test {
         let ra_socket = RouteableAddress::Tcp(SocketAddr::from_str("127.0.0.1:4050").unwrap());
         m.onward_address(ra_socket);
         println!("{:?}", m);
+    }
+
+    #[test]
+    fn local() {
+        let a = RouterAddress {
+            address_type: ROUTER_ADDRESS_LOCAL,
+            address: b"1234".to_vec(),
+        };
+        let v = serde_bare::to_vec::<RouterAddress>(&a).unwrap();
+        println!("{:?}", v);
+        assert_eq!(v, [0, 4, 49, 50, 51, 52]);
+    }
+
+    #[test]
+    fn route() {
+        let mut route = Route { addrs: vec![] };
+        route.addrs.push(RouterAddress::Local(b"printer".to_vec()));
+        let v = serde_bare::to_vec::<Route>(&route).unwrap();
+        println!("{:?}", v);
     }
 }
