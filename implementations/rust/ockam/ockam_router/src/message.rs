@@ -1,13 +1,11 @@
 use crate::message;
+use crate::router::{ROUTER_ADDRESS_TYPE_LOCAL, ROUTER_ADDRESS_TYPE_TCP};
 use ockam::Address;
 use serde::{Deserialize, Serialize};
-use serde_bare::Uint;
 use std::net::SocketAddr;
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
-#[repr(C)]
-
-pub struct RouterMessage {
+pub struct TransportMessage {
     pub version: u8,
     pub onward_route: Route,
     pub return_route: Route,
@@ -21,9 +19,6 @@ pub const ROUTER_MSG_REQUEST_CHANNEL: u8 = 3;
 pub const ROUTER_MSG_M2: u8 = 4;
 pub const ROUTER_MSG_M3: u8 = 5;
 
-pub const ROUTER_ADDRESS_LOCAL: Uint = serde_bare::Uint(0);
-pub const ROUTER_ADDRESS_TCP: Uint = serde_bare::Uint(1);
-
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 #[repr(C)]
 pub enum RouteableAddress {
@@ -35,7 +30,7 @@ pub enum RouteableAddress {
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 #[repr(C)]
 pub struct RouterAddress {
-    pub address_type: Uint,
+    pub address_type: u8,
     pub address: Vec<u8>,
 }
 
@@ -49,18 +44,18 @@ impl From<RouteableAddress> for RouterAddress {
     fn from(ra: RouteableAddress) -> Self {
         match ra {
             RouteableAddress::Local(v) => RouterAddress {
-                address_type: ROUTER_ADDRESS_LOCAL,
+                address_type: ROUTER_ADDRESS_TYPE_LOCAL,
                 address: v,
             },
             RouteableAddress::Tcp(socket) => {
                 let serialized = serde_bare::to_vec::<SocketAddr>(&socket).unwrap();
                 RouterAddress {
-                    address_type: ROUTER_ADDRESS_TCP,
+                    address_type: ROUTER_ADDRESS_TYPE_TCP,
                     address: serialized,
                 }
             }
             RouteableAddress::Address(address) => RouterAddress {
-                address_type: ROUTER_ADDRESS_LOCAL,
+                address_type: ROUTER_ADDRESS_TYPE_LOCAL,
                 address: address.to_vec(),
             },
         }
@@ -71,7 +66,7 @@ impl From<SocketAddr> for RouterAddress {
     fn from(s: SocketAddr) -> Self {
         let a = serde_bare::to_vec::<SocketAddr>(&s).unwrap();
         RouterAddress {
-            address_type: ROUTER_ADDRESS_TCP,
+            address_type: ROUTER_ADDRESS_TYPE_TCP,
             address: a,
         }
     }
@@ -82,9 +77,9 @@ pub struct Route {
     pub addrs: Vec<RouterAddress>,
 }
 
-impl RouterMessage {
+impl TransportMessage {
     pub fn new() -> Self {
-        RouterMessage {
+        TransportMessage {
             version: 1,
             onward_route: Route { addrs: vec![] },
             return_route: Route { addrs: vec![] },
@@ -92,7 +87,6 @@ impl RouterMessage {
         }
     }
     pub fn onward_address(&mut self, addr: RouteableAddress) {
-        println!("addr.intp(): {:?}", addr);
         self.onward_route.addrs.push(addr.into());
     }
     pub fn return_address(&mut self, addr: RouteableAddress) {
@@ -100,7 +94,7 @@ impl RouterMessage {
     }
 }
 
-impl Default for message::RouterMessage {
+impl Default for message::TransportMessage {
     fn default() -> Self {
         Self::new()
     }
@@ -110,8 +104,8 @@ impl Default for message::RouterMessage {
 
 mod test {
     use crate::message::{
-        Route, RouteableAddress, RouterAddress, RouterMessage, ROUTER_ADDRESS_LOCAL,
-        ROUTER_ADDRESS_TCP,
+        Route, RouteableAddress, RouterAddress, TransportMessage, ROUTER_ADDRESS_TYPE_LOCAL,
+        ROUTER_ADDRESS_TYPE_TCP,
     };
     use serde_bare::Uint;
     use std::net::SocketAddr;
@@ -122,7 +116,7 @@ mod test {
         let sa = SocketAddr::from_str("127.0.0.1:8080").unwrap();
         let sa_as_vec = serde_bare::to_vec::<SocketAddr>(&sa).unwrap();
         let ra = RouterAddress {
-            address_type: ROUTER_ADDRESS_TCP,
+            address_type: ROUTER_ADDRESS_TYPE_TCP,
             address: sa_as_vec,
         };
         let ra_serialized = serde_bare::to_vec::<RouterAddress>(&ra).unwrap();
@@ -135,13 +129,13 @@ mod test {
         let sa1 = SocketAddr::from_str("127.0.0.1:8080").unwrap();
         let sa1_as_vec = serde_bare::to_vec::<SocketAddr>(&sa1).unwrap();
         let ra1 = RouterAddress {
-            address_type: ROUTER_ADDRESS_TCP,
+            address_type: ROUTER_ADDRESS_TYPE_TCP,
             address: sa1_as_vec,
         };
         let sa2 = SocketAddr::from_str("127.0.0.1:8080").unwrap();
         let sa2_as_vec = serde_bare::to_vec::<SocketAddr>(&sa2).unwrap();
         let ra2 = RouterAddress {
-            address_type: ROUTER_ADDRESS_TCP,
+            address_type: ROUTER_ADDRESS_TYPE_TCP,
             address: sa2_as_vec,
         };
 
@@ -160,13 +154,13 @@ mod test {
         let sa1 = SocketAddr::from_str("127.0.0.1:8080").unwrap();
         let sa1_as_vec = serde_bare::to_vec::<SocketAddr>(&sa1).unwrap();
         let ra1 = RouterAddress {
-            address_type: ROUTER_ADDRESS_TCP,
+            address_type: ROUTER_ADDRESS_TYPE_TCP,
             address: sa1_as_vec,
         };
         let sa2 = SocketAddr::from_str("127.0.0.1:8080").unwrap();
         let sa2_as_vec = serde_bare::to_vec::<SocketAddr>(&sa2).unwrap();
         let ra2 = RouterAddress {
-            address_type: ROUTER_ADDRESS_TCP,
+            address_type: ROUTER_ADDRESS_TYPE_TCP,
             address: sa2_as_vec,
         };
         let route = Route {
@@ -193,16 +187,16 @@ mod test {
 
         let local_addr = b"printer".to_vec();
 
-        let m = RouterMessage {
+        let m = TransportMessage {
             version: 1,
             onward_route: Route {
                 addrs: vec![
                     RouterAddress {
-                        address_type: ROUTER_ADDRESS_TCP,
+                        address_type: ROUTER_ADDRESS_TYPE_TCP,
                         address: sock_addr_vec.clone(),
                     },
                     RouterAddress {
-                        address_type: ROUTER_ADDRESS_LOCAL,
+                        address_type: ROUTER_ADDRESS_TYPE_LOCAL,
                         address: local_addr.clone(),
                     },
                 ],
@@ -210,11 +204,11 @@ mod test {
             return_route: Route {
                 addrs: vec![
                     RouterAddress {
-                        address_type: ROUTER_ADDRESS_TCP,
+                        address_type: ROUTER_ADDRESS_TYPE_TCP,
                         address: sock_addr_vec,
                     },
                     RouterAddress {
-                        address_type: ROUTER_ADDRESS_LOCAL,
+                        address_type: ROUTER_ADDRESS_TYPE_LOCAL,
                         address: local_addr,
                     },
                 ],
@@ -222,8 +216,8 @@ mod test {
             payload: b"hello".to_vec(),
         };
 
-        let v = serde_bare::to_vec::<RouterMessage>(&m).unwrap();
-        let m2 = serde_bare::from_slice::<RouterMessage>(&v).unwrap();
+        let v = serde_bare::to_vec::<TransportMessage>(&m).unwrap();
+        let m2 = serde_bare::from_slice::<TransportMessage>(&v).unwrap();
         assert_eq!(m, m2)
     }
 
@@ -256,7 +250,7 @@ mod test {
 
     #[test]
     fn try_to() {
-        let mut m = RouterMessage::new();
+        let mut m = TransportMessage::new();
         let ra_local = RouteableAddress::Local(vec![1, 2, 3, 4]);
         m.onward_address(ra_local);
         let ra_socket = RouteableAddress::Tcp(SocketAddr::from_str("127.0.0.1:4050").unwrap());
@@ -267,19 +261,11 @@ mod test {
     #[test]
     fn local() {
         let a = RouterAddress {
-            address_type: ROUTER_ADDRESS_LOCAL,
+            address_type: ROUTER_ADDRESS_TYPE_LOCAL,
             address: b"1234".to_vec(),
         };
         let v = serde_bare::to_vec::<RouterAddress>(&a).unwrap();
         println!("{:?}", v);
         assert_eq!(v, [0, 4, 49, 50, 51, 52]);
-    }
-
-    #[test]
-    fn route() {
-        let mut route = Route { addrs: vec![] };
-        route.addrs.push(RouterAddress::Local(b"printer".to_vec()));
-        let v = serde_bare::to_vec::<Route>(&route).unwrap();
-        println!("{:?}", v);
     }
 }

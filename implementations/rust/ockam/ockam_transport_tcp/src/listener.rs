@@ -1,8 +1,8 @@
 use crate::error::TransportError;
+use crate::traits::Listener;
 use crate::TcpConnection;
 use async_trait::async_trait;
-use ockam::Result;
-use ockam_transport::traits::{Connection, Listener};
+use ockam_core::Result;
 use tokio::net::TcpListener as TokioTcpListener;
 
 pub struct TcpListener {
@@ -49,11 +49,13 @@ impl Listener for TcpListener {
     /// let mut  listener = TcpListener::new(address).await.unwrap();
     /// let connection = listener.accept().await.unwrap();
     /// ```
-    async fn accept(&mut self) -> Result<Box<dyn Connection + Send>> {
+    async fn accept(&mut self) -> Result<Box<TcpConnection>> {
+        println!("Listening");
         let stream = self.listener.accept().await;
         if stream.is_err() {
             Err(TransportError::Accept.into())
         } else {
+            println!("Connected!");
             let (stream, _) = stream.unwrap();
             Ok(TcpConnection::new_from_stream(stream).await?)
         }

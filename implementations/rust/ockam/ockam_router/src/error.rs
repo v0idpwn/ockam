@@ -1,4 +1,4 @@
-use ockam::Error;
+use ockam_core::Error;
 
 /// Represents the failures that can occur in
 /// Ockam Connection and Listener traits
@@ -7,6 +7,10 @@ pub enum RouterError {
     None,
     Stop,
     NoRoute,
+    TypeIdInUse,
+    NoSuchType,
+    KeyInUse,
+    NoSuchKey,
 }
 
 impl RouterError {

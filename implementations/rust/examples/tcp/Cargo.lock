@@ -875,6 +875,7 @@ dependencies = [
  "hex",
  "ockam",
  "ockam_core",
+ "ockam_node",
  "serde",
  "serde_bare",
  "serde_json",
@@ -903,6 +904,7 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "futures",
+ "hashbrown",
  "ockam",
  "ockam_core",
  "ockam_router",
@@ -1359,6 +1361,7 @@ dependencies = [
  "ockam",
  "ockam_node",
  "ockam_router",
+ "ockam_transport",
  "ockam_transport_tcp",
  "serde",
  "serde_bare",

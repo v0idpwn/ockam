@@ -1,5 +1,5 @@
 #![allow(unused)]
-use ockam_router::message::{Route, RouterAddress, RouterMessage, ROUTER_ADDRESS_TCP};
+use ockam_router::message::{Route, RouterAddress, RouterMessage, ROUTER_ADDRESS_TYPE_TCP};
 use ockam_transport_tcp::connection::TcpConnection;
 use ockam_transport_tcp::error::TransportError;
 use ockam_transport_tcp::listener::TcpListener;
@@ -15,7 +15,7 @@ use tokio::time::Duration;
 
 pub async fn run_test(mut c: Box<dyn Connection>, r: Option<RouterAddress>, listener: bool) {
     let mut remote_addr = RouterAddress {
-        address_type: ROUTER_ADDRESS_TCP,
+        address_type: ROUTER_ADDRESS_TYPE_TCP,
         address: vec![],
     };
     if listener {
@@ -87,7 +87,7 @@ fn main() {
             run_test(
                 c,
                 Some(RouterAddress {
-                    address_type: ROUTER_ADDRESS_TCP,
+                    address_type: ROUTER_ADDRESS_TYPE_TCP,
                     address: remote_addr,
                 }),
                 false,

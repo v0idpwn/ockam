@@ -9,9 +9,12 @@
 pub use connection::*;
 pub use error::*;
 pub use listener::*;
-pub use ockam_transport::traits::*;
+pub use tcp_router::*;
+pub use traits::*;
 
 // pub mod channel;
 pub mod connection;
 pub mod error;
 pub mod listener;
+pub mod tcp_router;
+pub mod traits;

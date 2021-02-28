@@ -11,6 +11,7 @@ crate-type = ["rlib"]
 ockam = {path = "../../ockam/ockam", version = "*"}
 ockam_node = {path = "../../ockam/ockam_node", version = "*"}
 ockam_router = {path = "../../ockam/ockam_router", version = "*"}
+ockam_transport = {path = "../../ockam/ockam_transport", version = "*"}
 ockam_transport_tcp = {path = "../../ockam/ockam_transport_tcp", version = "*"}
 serde_bare = "0.3.0"
 serde = {version = "1.0.120", features = ["derive"]}

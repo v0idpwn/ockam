@@ -1,33 +1,108 @@
-use ockam::Address;
+use async_trait::async_trait;
+use ockam::{Address, Context, Result, Worker};
+use ockam_router::{
+    LocalRouter, RouteTransportMessage, RouteableAddress, Router, TransportMessage,
+    LOCAL_ROUTER_ADDRESS, ROUTER_ADDRESS, ROUTER_ADDRESS_TYPE_LOCAL, ROUTER_ADDRESS_TYPE_TCP,
+};
+use ockam_transport_tcp::{TcpMessageRouter, TCP_ROUTER_ADDRESS};
 use std::net::SocketAddr;
 use std::str::FromStr;
-use tcp_examples::echo::{Echo, EchoMessage};
 
-fn main() {
-    let (ctx, mut exe) = ockam::start_node();
+pub struct ResponderEchoRelay {}
 
-    exe.execute(async move {
-        //let listen_addr = SocketAddr::from_str("127.0.0.1:4050").unwrap();
-        let listen_addr = SocketAddr::from_str("13.87.240.81:4000").unwrap();
-        let mut listener = ockam_transport_tcp::TcpListener::create(listen_addr)
-            .await
-            .unwrap();
-        let connection = listener.accept().await.unwrap();
-        let echo = Echo {
-            connection,
-            count: 0,
+impl ResponderEchoRelay {
+    pub fn new() -> Self {
+        ResponderEchoRelay {}
+    }
+}
+
+#[async_trait]
+impl Worker for ResponderEchoRelay {
+    type Message = RouteTransportMessage;
+    type Context = Context;
+
+    fn initialize(&mut self, _ctx: &mut Self::Context) -> Result<()> {
+        Ok(())
+    }
+
+    fn shutdown(&mut self, _context: &mut Self::Context) -> Result<()> {
+        Ok(())
+    }
+
+    async fn handle_message(&mut self, ctx: &mut Self::Context, msg: Self::Message) -> Result<()> {
+        return match msg {
+            RouteTransportMessage::Route(m) => {
+                println!(
+                    "initiator received message: {}",
+                    String::from_utf8(m.payload).unwrap()
+                );
+                let mut reply = TransportMessage::new();
+                reply.onward_route = m.return_route.clone();
+                reply.return_address(RouteableAddress::Local(ctx.address().to_vec()));
+                ctx.send_message(ROUTER_ADDRESS, RouteTransportMessage::Route(reply))
+                    .await
+                    .unwrap();
+                ctx.stop().await.unwrap();
+                Ok(())
+            }
         };
+    }
+}
 
-        let address: Address = "echo".into();
-        ctx.start_worker(address, echo).await.unwrap();
+#[ockam::node]
+async fn main(ctx: ockam::Context) {
+    // create and register everything
+    // main router
+    let mut router = Router::new();
 
-        ctx.send_message("echo", EchoMessage::Receive)
-            .await
-            .unwrap();
+    // local router
+    let mut local_router = LocalRouter::new();
+    if let Err(e) = router.register(
+        ROUTER_ADDRESS_TYPE_LOCAL,
+        Address::from(LOCAL_ROUTER_ADDRESS),
+    ) {
+        println!("{:?}", e);
+        ctx.stop().await.unwrap();
+    }
 
-        ctx.send_message("echo", EchoMessage::Send("hello".into()))
-            .await
-            .unwrap();
-    })
-    .unwrap();
+    // tcp router
+    let mut tcp_router = TcpMessageRouter::new();
+    if let Err(e) = router.register(ROUTER_ADDRESS_TYPE_TCP, Address::from(TCP_ROUTER_ADDRESS)) {
+        println!("{:?}", e);
+        ctx.stop().await.unwrap();
+    }
+
+    // create and register the tcp connection
+    let listen_addr = SocketAddr::from_str("127.0.0.1:4050").unwrap();
+    let mut listener = ockam_transport_tcp::TcpListener::create(listen_addr)
+        .await
+        .unwrap();
+    let connection = listener.accept().await.unwrap();
+    tcp_router.register(connection).unwrap();
+
+    // create and register the echo message relay
+    let relay = ResponderEchoRelay::new();
+    let echo_service_addr = Address::from("echo_service");
+    local_router
+        .register(Address::from("echo_service"))
+        .unwrap();
+
+    // start all the workers
+    // start the main router
+    ctx.start_worker(ROUTER_ADDRESS, router).await.unwrap();
+
+    // start the tcp router
+    ctx.start_worker(TCP_ROUTER_ADDRESS, tcp_router)
+        .await
+        .unwrap();
+
+    // start the local router
+    ctx.start_worker(LOCAL_ROUTER_ADDRESS, local_router)
+        .await
+        .unwrap();
+
+    // start the relay worker
+    ctx.start_worker(echo_service_addr.clone(), relay)
+        .await
+        .unwrap();
 }
