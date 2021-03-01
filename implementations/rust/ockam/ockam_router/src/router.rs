@@ -103,7 +103,9 @@ impl Worker for Router {
                     return Err(RouterError::NoSuchKey.into());
                 }
                 let handler_addr = handler_addr.unwrap();
-                let r = ctx.send_message(handler_addr.clone(), m).await;
+                let r = ctx
+                    .send_message(handler_addr.clone(), RouteTransportMessage::Route(m))
+                    .await;
                 match r {
                     Ok(..) => {
                         println!("router sent message to handler {}", handler_addr);
