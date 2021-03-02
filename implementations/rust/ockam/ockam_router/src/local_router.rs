@@ -20,10 +20,6 @@ impl LocalRouter {
         if self.registry.insert(key.clone(), addr).is_some() {
             return Err(RouterError::KeyInUse.into());
         };
-        println!(
-            "local_router registered {}",
-            String::from_utf8(key).unwrap()
-        );
         Ok(())
     }
 }
@@ -34,7 +30,6 @@ impl Worker for LocalRouter {
     type Context = Context;
 
     fn initialize(&mut self, _ctx: &mut Self::Context) -> Result<()> {
-        println!("local_router is running");
         Ok(())
     }
 
@@ -58,8 +53,8 @@ impl Worker for LocalRouter {
                     return Err(e);
                 }
                 Ok(())
-            },
-            _ => Ok(())
+            }
+            _ => Ok(()),
         };
     }
 }

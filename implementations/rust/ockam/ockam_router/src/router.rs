@@ -19,7 +19,7 @@ pub type RouterType = usize;
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 pub enum RouteTransportMessage {
     Route(TransportMessage),
-    Ping
+    Ping,
 }
 
 pub struct Router {
@@ -33,30 +33,15 @@ impl Router {
         }
     }
     pub fn register(&mut self, addr_type: u8, address: Address) -> Result<()> {
-        println!(
-            "Router registering type {:?} as {}",
-            addr_type,
-            address.to_string()
-        );
-        if let Some(a) = self.registry.get(&addr_type.clone()) {
-            println!(
-                "router: type id {:?} in use by {}",
-                addr_type,
-                a.to_string()
-            );
+        if let Some(_) = self.registry.get(&addr_type.clone()) {
             return Err(RouterError::TypeIdInUse.into());
         }
         self.registry.insert(addr_type.clone(), address.clone());
-        println!(
-            "router registered {:?} at address {}",
-            addr_type,
-            String::from_utf8(address.to_vec()).unwrap()
-        );
         Ok(())
     }
 }
 
-pub fn print_route(addrs: Vec<RouterAddress>) {
+pub fn print_route(addrs: &Vec<RouterAddress>) {
     println!("Printing route. Length{}", addrs.len());
     for a in addrs {
         println!(
@@ -74,7 +59,6 @@ impl Worker for Router {
     type Context = Context;
 
     fn initialize(&mut self, _context: &mut Self::Context) -> Result<()> {
-        println!("router is running");
         Ok(())
     }
 
@@ -87,18 +71,12 @@ impl Worker for Router {
         ctx: &mut Self::Context,
         router_msg: Self::Message,
     ) -> Result<()> {
-        println!("in handle_message for router");
         return match router_msg {
             RouteTransportMessage::Route(m) => {
                 if m.onward_route.addrs.is_empty() {
                     return Err(RouterError::NoRoute.into());
                 }
                 let next_hop = m.onward_route.addrs.get(0).unwrap();
-                println!("router - routing message");
-                println!("Onward:");
-                print_route(m.onward_route.addrs.clone());
-                println!("Return:");
-                print_route(m.return_route.addrs.clone());
                 let handler_addr = self.registry.get(&next_hop.address_type);
                 if handler_addr.is_none() {
                     return Err(RouterError::NoSuchKey.into());
@@ -108,14 +86,11 @@ impl Worker for Router {
                     .send_message(handler_addr.clone(), RouteTransportMessage::Route(m))
                     .await;
                 match r {
-                    Ok(..) => {
-                        println!("router sent message to handler {}", handler_addr);
-                        Ok(())
-                    }
+                    Ok(..) => Ok(()),
                     Err(e) => Err(e.into()),
                 }
             }
-            RouteTransportMessage::Ping => Ok(())
+            RouteTransportMessage::Ping => Ok(()),
         };
     }
 }
@@ -126,6 +101,7 @@ impl Worker for Router {
 //     use crate::router::{RouteMessage, Router};
 //     use async_trait::async_trait;
 //     use ockam::{Address, Result, Worker};
+//     use crate::ROUTER_ADDRESS_TYPE_LOCAL;
 //
 //     pub struct MyWorker {
 //         pub address: String,

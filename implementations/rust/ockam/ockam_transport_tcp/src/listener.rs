@@ -50,12 +50,10 @@ impl Listener for TcpListener {
     /// let connection = listener.accept().await.unwrap();
     /// ```
     async fn accept(&mut self) -> Result<Box<TcpConnection>> {
-        println!("Listening");
         let stream = self.listener.accept().await;
         if stream.is_err() {
             Err(TransportError::Accept.into())
         } else {
-            println!("Connected!");
             let (stream, _) = stream.unwrap();
             Ok(TcpConnection::new_from_stream(stream).await?)
         }

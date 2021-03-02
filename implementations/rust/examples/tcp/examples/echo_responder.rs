@@ -7,6 +7,7 @@ use ockam_router::{
 use ockam_transport_tcp::{TcpMessageRouter, TcpWorkerMessage, TCP_ROUTER_ADDRESS};
 use std::net::SocketAddr;
 use std::str::FromStr;
+use tokio::time::{sleep, Duration};
 
 pub struct ResponderEchoRelay {}
 
@@ -33,15 +34,17 @@ impl Worker for ResponderEchoRelay {
         return match msg {
             RouteTransportMessage::Route(m) => {
                 println!(
-                    "initiator received message: {}",
-                    String::from_utf8(m.payload).unwrap()
+                    "echoing \"{}\"",
+                    String::from_utf8(m.payload.clone()).unwrap()
                 );
                 let mut reply = TransportMessage::new();
                 reply.onward_route = m.return_route.clone();
                 reply.return_address(RouteableAddress::Local(ctx.address().to_vec()));
+                reply.payload = m.payload.clone();
                 ctx.send_message(ROUTER_ADDRESS, RouteTransportMessage::Route(reply))
                     .await
                     .unwrap();
+                sleep(Duration::from_millis(500)).await;
                 ctx.stop().await.unwrap();
                 Ok(())
             }
@@ -78,8 +81,7 @@ async fn main(ctx: ockam::Context) {
     let mut listener = ockam_transport_tcp::TcpListener::create(listen_addr)
         .await
         .unwrap();
-    let mut connection = listener.accept().await.unwrap();
-    let tcp_router_address = connection.get_router_address();
+    let connection = listener.accept().await.unwrap();
     let tcp_worker_address = connection.get_worker_address();
     tcp_router.register(tcp_worker_address.clone()).unwrap();
 
@@ -121,6 +123,6 @@ async fn main(ctx: ockam::Context) {
         .is_err()
     {
         println!("error receiving message");
-        ctx.stop();
+        ctx.stop().await.unwrap();
     }
 }

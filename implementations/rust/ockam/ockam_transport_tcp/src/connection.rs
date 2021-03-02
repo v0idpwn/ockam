@@ -1,17 +1,17 @@
 use crate::error::TransportError;
+use async_trait::async_trait;
+use ockam::{Address, Context, Worker};
 use ockam_core::Result;
 use ockam_router::message::{RouterAddress, TransportMessage};
-use ockam_router::{ROUTER_ADDRESS_TYPE_TCP, RouterError, ROUTER_ADDRESS, RouteTransportMessage};
+use ockam_router::{RouteTransportMessage, RouterError, ROUTER_ADDRESS, ROUTER_ADDRESS_TYPE_TCP};
+use serde::{Deserialize, Serialize};
 use std::convert::TryInto;
 use std::net::SocketAddr;
 use std::str::FromStr;
 use tokio::io;
 use tokio::net::TcpStream;
-use serde::{Deserialize, Serialize};
-use async_trait::async_trait;
-use ockam::{Address, Context, Worker};
 
-// todo - revisit these values
+// ToDo - revisit these values
 const MAX_MESSAGE_SIZE: usize = 2048;
 const DEFAULT_TCP_ADDRESS: &str = "127.0.0.1:4050";
 
@@ -55,22 +55,15 @@ impl TcpConnection {
     }
 
     pub async fn connect(&mut self) -> Result<()> {
-        println!("In connect");
         match self.stream {
             Some(_) => Ok(()), //Err(TransportError::AlreadyConnected.into()),
-            None => {
-                println!("Trying to connect...");
-                match TcpStream::connect(&self.remote_address).await {
-                    Ok(s) => {
-                        self.stream = Some(s);
-                        Ok(())
-                    }
-                    Err(e) => {
-                        println!("{:?}", e);
-                        Err(TransportError::ConnectFailed.into())
-                    }
+            None => match TcpStream::connect(&self.remote_address).await {
+                Ok(s) => {
+                    self.stream = Some(s);
+                    Ok(())
                 }
-            }
+                Err(_) => Err(TransportError::ConnectFailed.into()),
+            },
         }
     }
 
@@ -135,7 +128,9 @@ impl TcpConnection {
                 msg.onward_route.addrs.remove(0);
             }
         }
-        msg.return_route.addrs.insert(0, self.get_local_address());
+        msg.return_route
+            .addrs
+            .insert(0, self.get_local_address().clone());
         return match serde_bare::to_vec::<TransportMessage>(&msg) {
             Ok(mut msg_vec) => {
                 if msg_vec.len() > MAX_MESSAGE_SIZE - 2 {
@@ -207,7 +202,6 @@ impl TcpConnection {
                             self.send_message(m).await?;
                             continue;
                         }
-                        println!("Connection received: {:?}", m);
                         Ok(m)
                     }
                     Err(_) => Err(TransportError::IllFormedMessage.into()),
@@ -217,11 +211,19 @@ impl TcpConnection {
     }
 
     pub fn get_local_address(&self) -> RouterAddress {
-        let ra = serde_bare::to_vec::<SocketAddr>(&self.local_address).unwrap();
-        RouterAddress {
-            address_type: ROUTER_ADDRESS_TYPE_TCP,
-            address: ra,
-        }
+        return match &self.stream {
+            Some(stream) => {
+                let ra = serde_bare::to_vec::<SocketAddr>(&stream.local_addr().unwrap()).unwrap();
+                RouterAddress {
+                    address_type: ROUTER_ADDRESS_TYPE_TCP,
+                    address: ra,
+                }
+            }
+            None => RouterAddress {
+                address_type: ROUTER_ADDRESS_TYPE_TCP,
+                address: vec![],
+            },
+        };
     }
 
     pub fn get_remote_address(&self) -> RouterAddress {
@@ -245,21 +247,24 @@ impl TcpConnection {
 
     pub fn get_router_address(&self) -> RouterAddress {
         let v = serde_bare::to_vec::<SocketAddr>(&self.remote_address).unwrap();
-        RouterAddress { address_type: 1, address: v }
+        RouterAddress {
+            address_type: 1,
+            address: v,
+        }
     }
 
     pub fn get_remote_socket(&self) -> SocketAddr {
         return match &self.stream {
             Some(s) => s.peer_addr().unwrap(),
-            None => SocketAddr::from_str("0.0.0.0:00").unwrap()
-        }
+            None => SocketAddr::from_str("0.0.0.0:00").unwrap(),
+        };
     }
 }
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 pub enum TcpWorkerMessage {
     SendMessage(TransportMessage),
-    Receive
+    Receive,
 }
 
 #[async_trait]
@@ -285,17 +290,21 @@ impl Worker for Box<TcpConnection> {
                 }
             }
             TcpWorkerMessage::Receive => {
-                return if let Ok(mut msg) = self.receive_message().await {
-                    println!("connection worker got message");
+                return if let Ok(msg) = self.receive_message().await {
                     if msg.onward_route.addrs.is_empty() {
                         return Err(RouterError::NoRoute.into());
                     }
-                    ctx.send_message(ROUTER_ADDRESS, RouteTransportMessage::Route(msg)).await;
-                    Ok(())
+                    return match ctx
+                        .send_message(ROUTER_ADDRESS, RouteTransportMessage::Route(msg))
+                        .await
+                    {
+                        Ok(()) => Ok(()),
+                        Err(e) => Err(e),
+                    };
                 } else {
-                    Err(TransportError::ConnectionClosed.into())
-                }
+                    Ok(())
+                };
             }
-        }
+        };
     }
 }
