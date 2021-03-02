@@ -1,5 +1,6 @@
 use async_trait::async_trait;
 use ockam::{Address, Context, Result, Worker};
+use ockam_router::RouteTransportMessage::Route;
 use ockam_router::{
     LocalRouter, RouteTransportMessage, RouteableAddress, Router, TransportMessage,
     LOCAL_ROUTER_ADDRESS, ROUTER_ADDRESS, ROUTER_ADDRESS_TYPE_LOCAL, ROUTER_ADDRESS_TYPE_TCP,
@@ -40,6 +41,7 @@ impl Worker for InitiatorEchoRelay {
                 ctx.stop().await.unwrap();
                 Ok(())
             }
+            _ => Ok(()),
         };
     }
 }
@@ -68,14 +70,15 @@ async fn main(ctx: ockam::Context) {
     }
 
     // create and register the tcp connection
-    let socket_addr = SocketAddr::from_str("127.0.0.1:4050").unwrap();
-    let mut connection = TcpConnection::create(socket_addr.clone());
+    let mut connection = TcpConnection::create(SocketAddr::from_str("127.0.0.1:4050").unwrap());
     if let Err(e) = connection.connect().await {
         ctx.stop().await.unwrap();
         println!("{:?}", e);
         return;
     }
-    tcp_router.register(connection).unwrap();
+    let tcp_router_address = connection.get_router_address();
+    let tcp_worker_address = connection.get_worker_address();
+    tcp_router.register(tcp_worker_address.clone()).unwrap();
 
     // create and register the echo message relay
     let relay = InitiatorEchoRelay::new();
@@ -93,6 +96,11 @@ async fn main(ctx: ockam::Context) {
         .await
         .unwrap();
 
+    // tcp worker
+    ctx.start_worker(tcp_worker_address, connection)
+        .await
+        .unwrap();
+
     // local router
     ctx.start_worker(LOCAL_ROUTER_ADDRESS, local_router)
         .await
@@ -106,9 +114,11 @@ async fn main(ctx: ockam::Context) {
     // create and send the message
     sleep(Duration::from_millis(50)).await;
     let mut msg = TransportMessage::new();
-    msg.onward_address(RouteableAddress::Tcp(socket_addr));
+
+    msg.onward_route.addrs.insert(0, tcp_router_address);
     msg.onward_address(RouteableAddress::Local(b"echo_service".to_vec()));
     msg.return_address(RouteableAddress::Local(b"echo_service".to_vec()));
+    msg.payload = b"hello".to_vec();
     ctx.send_message(ROUTER_ADDRESS, RouteTransportMessage::Route(msg))
         .await
         .unwrap();

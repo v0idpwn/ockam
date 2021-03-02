@@ -1,16 +1,16 @@
 use async_trait::async_trait;
 use hashbrown::HashMap;
-use ockam::{Context, Worker};
+use ockam::{Context, Worker, Address};
 use ockam_core::Result;
 use ockam_router::router::RouteTransportMessage;
+use crate::{TransportError, TcpWorkerMessage};
+use ockam_router::{RouterError, RouterAddress};
+
 
 pub const TCP_ROUTER_ADDRESS: &str = "tcp_router";
 
-use crate::{TcpConnection, TransportError};
-use ockam_router::RouterError;
-
 pub struct TcpMessageRouter {
-    registry: HashMap<Vec<u8>, Box<TcpConnection>>, // <vectorized sockeaddr, worker address>,
+    registry: HashMap<Vec<u8>, Address>, // <vectorized sockeaddr, worker address>,
 }
 
 impl TcpMessageRouter {
@@ -19,17 +19,14 @@ impl TcpMessageRouter {
             registry: HashMap::new(),
         }
     }
-    pub fn register(&mut self, connection: Box<TcpConnection>) -> Result<()> {
-        let key = connection.get_routeable_address();
-        println!("tcp_router registered key: {:?}", key.clone(),);
-        if self.registry.contains_key(&key) {
+    pub fn register(&mut self, addr: Address) -> Result<()> {
+        println!("--------tcp_router registered key: {:?}", &addr,);
+        if self.registry.contains_key(&addr.to_vec()) {
             return Err(RouterError::KeyInUse.into());
         }
-        println!("...");
-        if self.registry.insert(key, connection).is_some() {
+        if self.registry.insert(addr.to_vec(), addr).is_some() {
             return Err(RouterError::Stop.into());
         }
-        println!("Registered");
         Ok(())
     }
 }
@@ -48,27 +45,31 @@ impl Worker for TcpMessageRouter {
         Ok(())
     }
 
-    async fn handle_message(&mut self, _ctx: &mut Self::Context, msg: Self::Message) -> Result<()> {
+    async fn handle_message(&mut self, ctx: &mut Self::Context, msg: Self::Message) -> Result<()> {
         println!("tcp_router got message");
         return match msg {
             RouteTransportMessage::Route(mut msg) => {
                 let tcp_addr = msg.onward_route.addrs.remove(0);
-                let connection = self.registry.remove(&tcp_addr.address);
-                if connection.is_none() {
-                    println!("None!!!");
+                let key = serde_bare::to_vec::<RouterAddress>(&tcp_addr).unwrap();
+                let addr = self.registry.get(&key);
+                println!("tcp_router looking up {:?}", key);
+                if addr.is_none() {
+                    println!("------no such key {:?}",key);
                     return Err(RouterError::NoSuchKey.into());
                 }
-                let mut connection = connection.unwrap();
-                if connection.send_message(msg).await.is_err() {
+                let addr = addr.unwrap().clone();
+                println!("tcp_router sending message to worker {:?}", addr.clone());
+                if ctx.send_message(addr.clone(), TcpWorkerMessage::SendMessage(msg)).await.is_err() {
                     return Err(TransportError::ConnectionClosed.into());
                 }
-                if connection.receive_message().await.is_err() {
+                println!("tcp_router message sent, now receiving");
+                if ctx.send_message(addr, TcpWorkerMessage::Receive).await.is_err() {
                     return Err(TransportError::ConnectionClosed.into());
                 }
-                self.registry
-                    .insert(connection.get_routeable_address(), connection);
+                println!("tcp_router sent receive");
                 Ok(())
-            }
+            },
+            _ => Ok(())
         };
     }
 }

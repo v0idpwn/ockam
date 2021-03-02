@@ -58,7 +58,8 @@ impl Worker for LocalRouter {
                     return Err(e);
                 }
                 Ok(())
-            }
+            },
+            _ => Ok(())
         };
     }
 }

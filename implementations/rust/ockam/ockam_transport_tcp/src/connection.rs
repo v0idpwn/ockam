@@ -1,12 +1,15 @@
 use crate::error::TransportError;
 use ockam_core::Result;
 use ockam_router::message::{RouterAddress, TransportMessage};
-use ockam_router::ROUTER_ADDRESS_TYPE_TCP;
+use ockam_router::{ROUTER_ADDRESS_TYPE_TCP, RouterError, ROUTER_ADDRESS, RouteTransportMessage};
 use std::convert::TryInto;
 use std::net::SocketAddr;
 use std::str::FromStr;
 use tokio::io;
 use tokio::net::TcpStream;
+use serde::{Deserialize, Serialize};
+use async_trait::async_trait;
+use ockam::{Address, Context, Worker};
 
 // todo - revisit these values
 const MAX_MESSAGE_SIZE: usize = 2048;
@@ -229,9 +232,70 @@ impl TcpConnection {
         }
     }
 
+    pub fn get_worker_address(&self) -> Address {
+        let addr = self.get_remote_address();
+        Address::from(serde_bare::to_vec::<RouterAddress>(&addr).unwrap())
+    }
+
     pub fn get_routeable_address(&self) -> Vec<u8> {
         let mut v = serde_bare::to_vec::<SocketAddr>(&self.remote_address).unwrap();
         v.insert(0, ROUTER_ADDRESS_TYPE_TCP);
         v
+    }
+
+    pub fn get_router_address(&self) -> RouterAddress {
+        let v = serde_bare::to_vec::<SocketAddr>(&self.remote_address).unwrap();
+        RouterAddress { address_type: 1, address: v }
+    }
+
+    pub fn get_remote_socket(&self) -> SocketAddr {
+        return match &self.stream {
+            Some(s) => s.peer_addr().unwrap(),
+            None => SocketAddr::from_str("0.0.0.0:00").unwrap()
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+pub enum TcpWorkerMessage {
+    SendMessage(TransportMessage),
+    Receive
+}
+
+#[async_trait]
+impl Worker for Box<TcpConnection> {
+    type Message = TcpWorkerMessage;
+    type Context = Context;
+
+    fn initialize(&mut self, _context: &mut Self::Context) -> Result<()> {
+        Ok(())
+    }
+
+    fn shutdown(&mut self, _context: &mut Self::Context) -> Result<()> {
+        Ok(())
+    }
+
+    async fn handle_message(&mut self, ctx: &mut Self::Context, msg: Self::Message) -> Result<()> {
+        return match msg {
+            TcpWorkerMessage::SendMessage(m) => {
+                if self.send_message(m).await.is_err() {
+                    Err(TransportError::ConnectionClosed.into())
+                } else {
+                    Ok(())
+                }
+            }
+            TcpWorkerMessage::Receive => {
+                return if let Ok(mut msg) = self.receive_message().await {
+                    println!("connection worker got message");
+                    if msg.onward_route.addrs.is_empty() {
+                        return Err(RouterError::NoRoute.into());
+                    }
+                    ctx.send_message(ROUTER_ADDRESS, RouteTransportMessage::Route(msg)).await;
+                    Ok(())
+                } else {
+                    Err(TransportError::ConnectionClosed.into())
+                }
+            }
+        }
     }
 }

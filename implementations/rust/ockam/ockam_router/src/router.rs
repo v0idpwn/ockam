@@ -19,6 +19,7 @@ pub type RouterType = usize;
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 pub enum RouteTransportMessage {
     Route(TransportMessage),
+    Ping
 }
 
 pub struct Router {
@@ -114,6 +115,7 @@ impl Worker for Router {
                     Err(e) => Err(e.into()),
                 }
             }
+            RouteTransportMessage::Ping => Ok(())
         };
     }
 }

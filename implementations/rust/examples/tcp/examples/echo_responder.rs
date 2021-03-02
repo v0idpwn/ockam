@@ -4,7 +4,7 @@ use ockam_router::{
     LocalRouter, RouteTransportMessage, RouteableAddress, Router, TransportMessage,
     LOCAL_ROUTER_ADDRESS, ROUTER_ADDRESS, ROUTER_ADDRESS_TYPE_LOCAL, ROUTER_ADDRESS_TYPE_TCP,
 };
-use ockam_transport_tcp::{TcpMessageRouter, TCP_ROUTER_ADDRESS};
+use ockam_transport_tcp::{TcpMessageRouter, TcpWorkerMessage, TCP_ROUTER_ADDRESS};
 use std::net::SocketAddr;
 use std::str::FromStr;
 
@@ -45,6 +45,7 @@ impl Worker for ResponderEchoRelay {
                 ctx.stop().await.unwrap();
                 Ok(())
             }
+            _ => Ok(()),
         };
     }
 }
@@ -77,8 +78,10 @@ async fn main(ctx: ockam::Context) {
     let mut listener = ockam_transport_tcp::TcpListener::create(listen_addr)
         .await
         .unwrap();
-    let connection = listener.accept().await.unwrap();
-    tcp_router.register(connection).unwrap();
+    let mut connection = listener.accept().await.unwrap();
+    let tcp_router_address = connection.get_router_address();
+    let tcp_worker_address = connection.get_worker_address();
+    tcp_router.register(tcp_worker_address.clone()).unwrap();
 
     // create and register the echo message relay
     let relay = ResponderEchoRelay::new();
@@ -96,6 +99,11 @@ async fn main(ctx: ockam::Context) {
         .await
         .unwrap();
 
+    // tcp worker
+    ctx.start_worker(tcp_worker_address.clone(), connection)
+        .await
+        .unwrap();
+
     // start the local router
     ctx.start_worker(LOCAL_ROUTER_ADDRESS, local_router)
         .await
@@ -105,4 +113,14 @@ async fn main(ctx: ockam::Context) {
     ctx.start_worker(echo_service_addr.clone(), relay)
         .await
         .unwrap();
+
+    // wait for the message
+    if ctx
+        .send_message(tcp_worker_address, TcpWorkerMessage::Receive)
+        .await
+        .is_err()
+    {
+        println!("error receiving message");
+        ctx.stop();
+    }
 }
