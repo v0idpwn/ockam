@@ -845,6 +845,7 @@ dependencies = [
 name = "ockam_channel"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
  "ockam",
  "ockam_core",
  "ockam_key_exchange_core",
