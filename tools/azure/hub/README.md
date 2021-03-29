@@ -23,7 +23,7 @@ az deployment group create \
   --name $AZ_DEPLOYMENT \
   --resource-group $AZ_RESOURCE_GROUP \
   --template-file tools/azure/hub/azure.json \
-  --parameters @tools/azure/hub/secret.parameters.json
+  --parameters @tools/azure/hub/parameters.json
 ```
 
 Attach to container
