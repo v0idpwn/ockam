@@ -146,7 +146,24 @@ defmodule Ockam.Hub.Service.Stream.Instance do
     reply_route = Keyword.fetch!(options, :reply_route)
     stream_name = Keyword.fetch!(options, :stream_name)
 
-    state = Map.merge(state, %{reply_route: reply_route, stream_name: stream_name})
+    storage_mod = case Keyword.fetch(options, :storage_mod) do
+      {:ok, storage_mod} -> storage_mod
+      :error -> Ockam.Hub.Service.Stream.Storage.Internal
+    end
+
+    storage_options = Keyword.get(options, :storage_options, [])
+
+    storage = case storage_mod.init(stream_name, storage_options) do
+      {:ok, storage_state} -> {storage_mod, storage_state}
+      {:error, error} ->
+        raise("Unable to create storage: #{inspect({storage_mod, stream_name, storage_options})}. Reason: #{inspect(error)}")
+    end
+
+    state = Map.merge(state, %{
+      reply_route: reply_route,
+      stream_name: stream_name,
+      storage: storage
+    })
 
     reply_init(stream_name, reply_route, state)
 
@@ -181,40 +198,59 @@ defmodule Ockam.Hub.Service.Stream.Instance do
   def handle_data("stream_pull", pull_request, return_route, state) do
     Logger.info("Pull request #{inspect(pull_request)}")
     %{request_id: request_id, index: index, limit: limit} = pull_request
-    messages = fetch_messages(index, limit, state)
-    reply_pull_response(messages, request_id, return_route, state)
-    {:ok, state}
+    case fetch_messages(index, limit, state) do
+      {{:ok, messages}, new_state} ->
+        reply_pull_response(messages, request_id, return_route, state)
+        {:ok, new_state}
+      {{:error, err}, new_state} ->
+        Logger.error("Error fetching messages #{inspect(err)}")
+        ## TODO: reply error with request id
+        reply_pull_response([], request_id, return_route, state)
+        {:ok, new_state}
+    end
   end
 
-  ## Queue API
-  ## TODO: this needs to be extracted
+  ## Storage:
+
+  @spec init_storage(state()) :: {:ok | {:error, any()}, state()}
+  def init_storage(state) do
+    stream_name = Map.get(state, :stream_name)
+    with_storage(state, fn(storage_mod, storage_state) ->
+      storage_mod.create_stream(stream_name, storage_state)
+    end)
+  end
 
   @spec save_message(any(), state()) :: {{:ok, integer()} | {:error, any()}, state()}
   def save_message(data, state) do
-    storage = Map.get(state, :storage, %{})
-    latest = Map.get(storage, :latest, 0)
-    next = latest + 1
-    message = %{index: next, data: data}
-
-    new_storage =
-      storage
-      |> Map.put(next, message)
-      |> Map.put(:latest, next)
-
-    {{:ok, next}, Map.put(state, :storage, new_storage)}
+    stream_name = Map.get(state, :stream_name)
+    with_storage(state, fn(storage_mod, storage_state) ->
+      storage_mod.save(stream_name, data, storage_state)
+    end)
   end
 
-  @spec fetch_messages(integer(), integer(), state()) :: [%{index: integer(), data: any()}]
+  @spec fetch_messages(integer(), integer(), state()) :: {{:ok, [%{index: integer(), data: any()}]} | {:error, any()}, state()}
   def fetch_messages(index, limit, state) do
-    storage = Map.get(state, :storage, %{})
-    earliest = Map.get(storage, :earliest, 0)
-    start_from = max(index, earliest)
-    end_on = start_from + limit - 1
+    stream_name = Map.get(state, :stream_name)
+    with_storage(state, fn(storage_mod, storage_state) ->
+      storage_mod.fetch(stream_name, index, limit, storage_state)
+    end)
+  end
 
-    ## Naive impl. Gaps are ignored as there shouldn't be any
-    :lists.seq(start_from, end_on)
-    |> Enum.map(fn i -> Map.get(storage, i) end)
-    |> Enum.reject(&is_nil/1)
+  def with_storage(state, fun) do
+    {storage_mod, storage_state} = get_storage(state)
+    {result, new_storage_state} = fun.(storage_mod, storage_state)
+    {result, put_storage(new_storage_state, state)}
+  end
+
+  def get_storage(state) do
+    Map.fetch!(state, :storage)
+  end
+
+  def put_storage(new_storage_state, state) do
+    Map.update!(state, :storage,
+      fn({mod, _old_storage_state}) ->
+        {mod, new_storage_state}
+      end)
   end
 
   ## Replies
