@@ -37,10 +37,12 @@ pub use lease::*;
 mod remote_mailbox;
 pub use remote_mailbox::*;
 
+pub mod mailbox;
+
 pub use ockam_core::async_trait::async_trait as async_worker;
 pub use ockam_core::{
-    Address, Any, Encoded, Error, Message, Result, Route, Routed, RouterMessage, TransportMessage,
-    Worker,
+    Address, Any, Encoded, Error, Message, ProtocolId, Result, Route, Routed, RouterMessage,
+    TransportMessage, Worker,
 };
 
 pub use ockam_channel::{SecureChannel, SecureChannelListenerMessage};

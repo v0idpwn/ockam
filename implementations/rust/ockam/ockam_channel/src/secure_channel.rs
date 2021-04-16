@@ -270,6 +270,7 @@ impl Worker for SecureChannel {
         let reply = msg.return_route().clone();
         let mut onward_route = msg.onward_route();
         let msg_addr = msg.msg_addr();
+        let protocol = msg.protocol();
         let transport_message = msg.into_transport_message();
         let payload = transport_message.payload;
 
@@ -282,6 +283,7 @@ impl Worker for SecureChannel {
                 version: 1,
                 onward_route,
                 return_route: reply,
+                protocol,
                 payload,
             };
             let payload = msg.encode()?;

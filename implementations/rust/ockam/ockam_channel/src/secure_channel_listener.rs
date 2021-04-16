@@ -37,6 +37,8 @@ impl Worker for SecureChannelListener {
         msg: Routed<Self::Message>,
     ) -> Result<()> {
         let reply = msg.return_route().clone();
+        let protocol = msg.protocol();
+
         match msg.body() {
             SecureChannelListenerMessage::CreateResponderChannel { payload } => {
                 let address_remote: Address = random();
@@ -58,6 +60,7 @@ impl Worker for SecureChannelListener {
                     version: 1,
                     onward_route: address_remote.into(),
                     return_route: reply,
+                    protocol,
                     payload: payload.encode()?,
                 };
 

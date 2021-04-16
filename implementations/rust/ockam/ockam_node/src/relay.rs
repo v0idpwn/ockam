@@ -17,7 +17,7 @@
 
 use crate::{parser, Context, Mailbox};
 use ockam_core::{
-    Address, Message, Result, Route, Routed, RouterMessage, TransportMessage, Worker,
+    Address, Message, ProtocolId, Result, Route, Routed, RouterMessage, TransportMessage, Worker,
 };
 use std::{marker::PhantomData, sync::Arc};
 use tokio::runtime::Runtime;
@@ -69,7 +69,7 @@ impl RelayMessage {
 #[derive(Clone, Debug)]
 pub enum RelayPayload {
     Direct(TransportMessage),
-    PreRouter(Vec<u8>, Route),
+    PreRouter(Vec<u8>, Route), // RouterMessage::Route(TransportMessage)
 }
 
 pub struct Relay<W, M>
@@ -125,7 +125,16 @@ Is your router accepting the correct message type? (ockam_core::RouterMessage)",
     }
 
     async fn run(mut self) {
-        self.worker.initialize(&mut self.ctx).await.unwrap();
+        match self.worker.initialize(&mut self.ctx).await {
+            Ok(()) => {}
+            Err(e) => {
+                error!(
+                    "Failed to initialize worker {}, error: {}",
+                    self.ctx.address(),
+                    e
+                );
+            }
+        }
 
         while let Some(RelayMessage { addr, data, .. }) = self.ctx.mailbox.next().await {
             // Extract the message type based on the relay message
@@ -135,18 +144,31 @@ Is your router accepting the correct message type? (ockam_core::RouterMessage)",
             let (msg, _, transport_message) =
                 match (|data| -> Result<(M, Route, TransportMessage)> {
                     Ok(match data {
+                        // This condition applies when the message was
+                        // addressed to the current worker.  Thus we
+                        // extract the message type
                         RelayPayload::Direct(trans_msg) => self
                             .handle_direct(&trans_msg, addr.clone())
                             .map(|(msg, r)| (msg, r, trans_msg))?,
+                        // This condition applies when the current
+                        // worker is a router, responsible for
+                        // handling re-routing a message
                         RelayPayload::PreRouter(enc_msg, route) => {
                             self.handle_pre_router(&enc_msg, addr.clone()).map(|m| {
                                 (
                                     m,
                                     route.clone(),
+                                    // Because the TransportMessage is
+                                    // wrapped in a RouterMessage,
+                                    // _but_ the realy doesn't know
+                                    // about this we construct a phony
+                                    // TransportMessage here (that is
+                                    // never sent on)
                                     TransportMessage {
                                         version: 0,
                                         return_route: Route::new().into(),
                                         onward_route: route,
+                                        protocol: ProtocolId::none(),
                                         payload: enc_msg,
                                     },
                                 )

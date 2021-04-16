@@ -6,7 +6,9 @@ use crate::{
     relay::{self, RelayMessage},
     Cancel, Mailbox, NodeMessage,
 };
-use ockam_core::{Address, AddressSet, Message, Result, Route, TransportMessage, Worker};
+use ockam_core::{
+    Address, AddressSet, Message, ProtocolId, Result, Route, TransportMessage, Worker,
+};
 use std::sync::Arc;
 use tokio::{
     runtime::Runtime,
@@ -174,6 +176,44 @@ impl Context {
         self.send_from_address(route, msg, self.address()).await
     }
 
+    /// Beep boop
+    // TODO: dedup properly
+    pub async fn send_protocol<R, M>(&self, route: R, protocol: &'static str, msg: M) -> Result<()>
+    where
+        R: Into<Route>,
+        M: Message + Send + 'static,
+    {
+        let route = route.into();
+        let (reply_tx, mut reply_rx) = channel(1);
+        let next = route.next().unwrap(); // TODO: communicate bad routes
+        let req = NodeMessage::SenderReq(next.clone(), reply_tx);
+
+        // First resolve the next hop in the route
+        self.sender.send(req).await.map_err(|e| Error::from(e))?;
+        let (addr, sender, needs_wrapping) = reply_rx
+            .recv()
+            .await
+            .ok_or(Error::InternalIOFailure)??
+            .take_sender()?;
+
+        // Pack the payload into a TransportMessage
+        let payload = msg.encode().unwrap();
+        let mut data = TransportMessage::v1_protocol(route.clone(), payload, protocol);
+        data.return_route.modify().append(self.address());
+
+        // Pack transport message into relay message wrapper
+        let msg = if needs_wrapping {
+            RelayMessage::pre_router(addr, data, route)
+        } else {
+            RelayMessage::direct(addr, data, route)
+        };
+
+        // Send the packed user message with associated route
+        sender.send(msg).await.map_err(|e| Error::from(e))?;
+
+        Ok(())
+    }
+
     /// Send a message via a fully qualified route using specific Worker address
     ///
     /// Routes can be constructed from a set of [`Address`]es, or via
@@ -213,7 +253,7 @@ impl Context {
         // Pack the payload into a TransportMessage
         let payload = msg.encode().unwrap();
         let mut data = TransportMessage::v1(route.clone(), payload);
-        data.return_route.modify().append(self.address());
+        data.return_route.modify().append(sending_address);
 
         // Pack transport message into relay message wrapper
         let msg = if needs_wrapping {
@@ -327,6 +367,40 @@ impl Context {
             .map_err(|_| Error::InternalIOFailure)?;
 
         Ok(rx.recv().await.ok_or(Error::InternalIOFailure)??.is_ok()?)
+    }
+
+    /// Create a delegation worker for a particular protocol identifier
+    ///
+    /// Workers in the Ockam SDK can only ever handle a single static
+    /// message type.  But some workers may want to be able to accept
+    /// different protocols via payloads asynchronously.  To allow for
+    /// this, a [`ProtocolId`](ockam_core::ProtocolId) identifier is
+    /// present in the underlying message frame.  This ID can be used
+    /// to delegate protocol payloads to workers that are explicitly
+    /// equipped to deal with these messages.
+    pub async fn delegate<NM, NW>(&self, proto: ProtocolId, worker: NW) -> Result<()>
+    where
+        NM: Message + Send + 'static,
+        NW: Worker<Context = Context, Message = NM>,
+    {
+        let _delegate_worker = format!("{}-{}", self.address(), proto);
+
+        Ok(())
+    }
+
+    pub fn register_protocol<'ctx, F>(&'ctx mut self, protocol: &str, handle: F) -> Result<()>
+    where
+        F: Fn(TransportMessage, &'ctx Context) -> T,
+        T: ,
+    {
+        todo!()
+    }
+
+    pub fn handle_protocol<T>(&self, protocol: ProtocolId, msg: TransportMessage) -> T {
+        // TODO: find the closure for the appropriate protocol
+        // Call it with the TransportMessage and &self
+        // Return what the closure returns
+        todo!()
     }
 
     /// A convenience function to get a data 3-tuple from the mailbox

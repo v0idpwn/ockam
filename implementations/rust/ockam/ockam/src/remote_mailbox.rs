@@ -105,6 +105,7 @@ impl<T: Message> Worker for RemoteMailbox<T> {
 
     async fn handle_message(&mut self, ctx: &mut Context, msg: Routed<T>) -> Result<()> {
         let return_route = msg.return_route();
+        let protocol = msg.protocol();
         let payload = msg.body().encode()?;
         info!("RemoteMailbox received message");
 
@@ -112,6 +113,7 @@ impl<T: Message> Worker for RemoteMailbox<T> {
             version: 1,
             onward_route: self.destination.clone(),
             return_route,
+            protocol,
             payload,
         };
 

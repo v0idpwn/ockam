@@ -1,14 +1,69 @@
 use crate::{
     lib::{
         fmt::{self, Debug, Display, Formatter},
-        Deref, DerefMut, Vec,
+        str, Deref, DerefMut, Vec,
     },
     Address, Result, Route, TransportMessage,
 };
-use serde::{de::DeserializeOwned, Serialize};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
 /// Alias of the type used for encoded data.
 pub type Encoded = Vec<u8>;
+
+/// A user-defined protocol identifier
+///
+/// When creating workers that should asynchronously speak different
+/// protocols, this identifier can be used to switch message parsing
+/// between delegated workers, each responsible for only one protocol.
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, Hash, Ord, PartialOrd, Eq, PartialEq)]
+pub struct ProtocolId([u8; 8], u8);
+
+impl ProtocolId {
+    /// Create a None protocol Id (with left pad)
+    pub fn none() -> Self {
+        Self([0; 8], 0)
+    }
+
+    /// Use the first 8 bytes of a string as the protocol ID
+    pub fn from_str(s: &str) -> Self {
+        let len = if s.len() < 8 { s.len() } else { 8 };
+        Self(
+            s.as_bytes()
+                .iter()
+                .take(8)
+                .enumerate()
+                .fold([0; 8], |mut buf, (idx, x)| {
+                    buf[idx] = *x;
+                    buf
+                }),
+            len as u8,
+        )
+    }
+
+    /// Get the protocol as a &str
+    pub fn as_str<'s>(&'s self) -> &'s str {
+        str::from_utf8(&self.0[0..self.1 as usize]).unwrap_or("<unprintable>")
+    }
+}
+
+impl From<&'static str> for ProtocolId {
+    fn from(s: &'static str) -> Self {
+        Self::from_str(s)
+    }
+}
+
+impl Display for ProtocolId {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        write!(
+            f,
+            "{}",
+            match str::from_utf8(&self.0) {
+                Ok(s) => s,
+                Err(_) => "<Non UTF-8>",
+            }
+        )
+    }
+}
 
 /// A user defined message that can be serialised and deserialised
 pub trait Message: Sized + Send + 'static {
@@ -103,6 +158,12 @@ impl<M: Message> Routed<M> {
     #[inline]
     pub fn payload(&self) -> &Vec<u8> {
         &self.transport.payload
+    }
+
+    /// Get a reference to the message protocol identifier
+    #[inline]
+    pub fn protocol(&self) -> ProtocolId {
+        self.transport.protocol
     }
 }
 
