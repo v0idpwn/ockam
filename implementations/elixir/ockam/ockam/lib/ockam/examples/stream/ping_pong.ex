@@ -12,7 +12,7 @@ defmodule Ockam.Example.Stream.Ping do
 
     {previous, ""} = Integer.parse(Message.payload(message))
 
-    Logger.info("\nReceived pong fo #{inspect(previous)}")
+    Logger.info("\nReceived pong for: #{inspect(previous)}")
 
     state =
       case Map.get(state, :last, 0) do
