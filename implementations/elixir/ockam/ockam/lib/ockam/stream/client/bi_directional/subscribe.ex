@@ -34,7 +34,7 @@ end
 
 defmodule Ockam.Stream.Client.BiDirectional.Subscribe do
   @moduledoc """
-  Helper service to subscribe remote nodes to bi-deirectional stream
+  Helper service to subscribe remote nodes to bi-directional stream
   """
   use Ockam.Worker
   use Ockam.Protocol.Mapping
