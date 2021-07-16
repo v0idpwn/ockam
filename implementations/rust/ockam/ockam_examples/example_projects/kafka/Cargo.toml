@@ -1,0 +1,15 @@
+[package]
+name = "kafka"
+version = "0.1.0"
+authors = ["Ockam Developers"]
+edition = "2018"
+
+[dependencies]
+ockam = {path = "../../../ockam", features = ["ockam_transport_tcp", "ockam_vault"]}
+ockam_core = {path = "../../../ockam_core"}
+
+[[bin]]
+name = "initiator"
+
+[[bin]]
+name = "responder"
