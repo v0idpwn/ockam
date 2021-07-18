@@ -1,10 +1,10 @@
-use ockam::{stream::Stream, Address, Context, Message, Result, Route, SecureChannel, TcpTransport, Vault, TCP};
+use ockam::{stream::Stream, Context, Message, Result, Route, SecureChannel, TcpTransport, Vault, TCP};
 use ockam_core::{LocalMessage, TransportMessage};
 use kafka::Ping;
 use std::time::Duration;
 
 #[ockam::node]
-async fn main(mut ctx: Context) -> Result<()> {
+async fn main(ctx: Context) -> Result<()> {
     // Create a ping worker
     ctx.start_worker("ping", Ping::default()).await?;
 
@@ -42,21 +42,14 @@ async fn main(mut ctx: Context) -> Result<()> {
     )
     .await?;
 
+    // Prime the pump, so to speak
     let transport_message = TransportMessage::v1(
         Route::new().append(secure_channel.address()).append("pong"),
         Route::new().append("ping"),
         "0".to_string().encode().unwrap(),
     );
-
     let local_message = LocalMessage::new(transport_message, vec![]);
     ctx.forward(local_message).await?;
-
-    /*ctx.send_from_address(
-        Route::new().append(secure_channel.address()).append("pong"),
-        "0".to_string(),
-        ctx.address() // Address::from_string("0#ping")
-    )
-    .await?;*/
 
     // Don't call ctx.stop() here so this node runs forever.
     Ok(())
