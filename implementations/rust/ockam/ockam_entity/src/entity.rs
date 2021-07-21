@@ -1,6 +1,6 @@
 use crate::EntityError::IdentityApiFailed;
 use crate::{
-    profile::Profile, traits::Verifier, worker::EntityWorker, AuthenticationProof, BbsCredential,
+    profile::Profile, traits::Verifier1, worker::EntityWorker, AuthenticationProof, BbsCredential,
     Changes, Contact, Credential, CredentialAttribute, CredentialFragment1, CredentialFragment2,
     CredentialOffer, CredentialPresentation, CredentialProof, CredentialProtocol,
     CredentialPublicKey, CredentialRequest, CredentialRequestFragment, CredentialSchema,
@@ -471,7 +471,7 @@ impl Holder for Entity {
     }
 }
 
-impl Verifier for Entity {
+impl Verifier1 for Entity {
     fn create_proof_request_id(&self) -> Result<ProofRequestId> {
         let profile = self.clone().current_profile().expect("no current profile");
         if let Res::CreateProofRequestId(request_id) = profile.call(CreateProofRequestId(
@@ -516,6 +516,44 @@ impl Verifier for Entity {
                 proof_request_id,
             ))?
         {
+            Ok(verified)
+        } else {
+            err()
+        }
+    }
+
+    fn add_remote_credential(
+        &mut self,
+        holder: &ProfileIdentifier,
+        schema: CredentialSchema,
+        attributes_values: Vec<CredentialAttribute>,
+    ) -> Result<()> {
+        let profile = self.clone().current_profile().expect("no current profile");
+        if let Res::AddRemoteCredential = profile.call(AddRemoteCredential(
+            profile.identifier().expect("couldn't get profile id"),
+            holder.clone(),
+            schema,
+            attributes_values,
+        ))? {
+            Ok(())
+        } else {
+            err()
+        }
+    }
+
+    fn check_remote_credential(
+        &mut self,
+        holder: &ProfileIdentifier,
+        schema: CredentialSchema,
+        attributes_values: Vec<CredentialAttribute>,
+    ) -> Result<bool> {
+        let profile = self.clone().current_profile().expect("no current profile");
+        if let Res::CheckRemoteCredential(verified) = profile.call(CheckRemoteCredential(
+            profile.identifier().expect("couldn't get profile id"),
+            holder.clone(),
+            schema,
+            attributes_values,
+        ))? {
             Ok(verified)
         } else {
             err()
@@ -604,12 +642,11 @@ impl CredentialProtocol for Entity {
         })
     }
 
-    fn verify_credential(
+    fn create_credential_verifier_listener(
         &mut self,
         address: impl Into<Address> + Send,
         issuer_id: &ProfileIdentifier,
         schema: CredentialSchema,
-        attributes_values: Vec<CredentialAttribute>,
     ) -> Result<bool> {
         let mut profile = self.clone().current_profile().expect("no current profile");
         block_future(&self.handle.ctx.runtime(), async move {
@@ -621,7 +658,6 @@ impl CredentialProtocol for Entity {
                 profile.clone(),
                 pubkey.as_ref().try_into().unwrap(), // FIXME
                 schema,
-                attributes_values,
                 ctx.address(),
             );
 

@@ -18,7 +18,7 @@
 /// TODO
 ///
 use crate::{
-    traits::Verifier, AuthenticationProof, BbsCredential, Changes, Contact, Credential,
+    traits::Verifier1, AuthenticationProof, BbsCredential, Changes, Contact, Credential,
     CredentialAttribute, CredentialFragment1, CredentialFragment2, CredentialOffer,
     CredentialPresentation, CredentialProof, CredentialPublicKey, CredentialRequest,
     CredentialRequestFragment, CredentialSchema, Entity, EntityCredential, Handle, Holder,
@@ -263,7 +263,7 @@ impl Holder for Profile {
     }
 }
 
-impl Verifier for Profile {
+impl Verifier1 for Profile {
     fn create_proof_request_id(&self) -> Result<ProofRequestId> {
         self.entity().create_proof_request_id()
     }
@@ -288,5 +288,25 @@ impl Verifier for Profile {
             presentation_manifest,
             proof_request_id,
         )
+    }
+
+    fn add_remote_credential(
+        &mut self,
+        holder: &ProfileIdentifier,
+        schema: CredentialSchema,
+        attributes_values: Vec<CredentialAttribute>,
+    ) -> Result<()> {
+        self.entity()
+            .add_remote_credential(holder, schema, attributes_values)
+    }
+
+    fn check_remote_credential(
+        &mut self,
+        holder: &ProfileIdentifier,
+        schema: CredentialSchema,
+        attributes_values: Vec<CredentialAttribute>,
+    ) -> Result<bool> {
+        self.entity()
+            .check_remote_credential(holder, schema, attributes_values)
     }
 }

@@ -357,6 +357,28 @@ impl Worker for EntityWorker {
                     err()
                 }
             }
+            AddRemoteCredential(profile_id, holder_id, schema, attributes_values) => {
+                if let Ok(()) = self.profile(&profile_id).add_remote_credential(
+                    &holder_id,
+                    schema,
+                    attributes_values,
+                ) {
+                    ctx.send(reply, Res::AddRemoteCredential).await
+                } else {
+                    err()
+                }
+            }
+            CheckRemoteCredential(profile_id, holder_id, schema, attributes_values) => {
+                if let Ok(c) = self.profile(&profile_id).check_remote_credential(
+                    &holder_id,
+                    schema,
+                    attributes_values,
+                ) {
+                    ctx.send(reply, Res::CheckRemoteCredential(c)).await
+                } else {
+                    err()
+                }
+            }
         }
     }
 }

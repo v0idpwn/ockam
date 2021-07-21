@@ -46,4 +46,6 @@ pub enum IdentityResponse {
     VerifyCredentialPresentation(bool),
     AddCredential,
     GetCredential(EntityCredential),
+    AddRemoteCredential,
+    CheckRemoteCredential(bool),
 }

@@ -1,13 +1,13 @@
 use lib::{
-    read_line, DOOR_LISTENER_ADDRESS, DOOR_TCP_ADDRESS, DOOR_WORKER_ADDRESS, OFFICE_ISSUER_ADDRESS,
+    read_entity_id, DoorIsOpenedMessage, OpenDoorMessage, DOOR_CONTROLLER_ADDRESS,
+    DOOR_LISTENER_ADDRESS, DOOR_TCP_ADDRESS, DOOR_VERIFIER_ADDRESS, OFFICE_ISSUER_ADDRESS,
     OFFICE_LISTENER_ADDRESS, OFFICE_TCP_ADDRESS,
 };
 use ockam::{
-    credential_attribute_values, credential_type, reveal_attributes, route, Context,
-    CredentialProtocol, Entity, EntityIdentifier, IdentifierTrustPolicy, Identity, Result,
-    SecureChannels, TcpTransport, Vault, TCP,
+    credential_attribute_values, credential_type, reveal_attributes, route, Address, Context,
+    CredentialProtocol, Entity, IdentifierTrustPolicy, Identity, Result, SecureChannels,
+    TcpTransport, Vault, TCP,
 };
-use std::convert::TryFrom;
 
 #[ockam::node]
 async fn main(ctx: Context) -> Result<()> {
@@ -16,12 +16,10 @@ async fn main(ctx: Context) -> Result<()> {
     println!("Bob id: {}", entity.identifier()?);
 
     println!("Enter Office id: ");
-    let office_id = read_line();
-    let office_id = EntityIdentifier::try_from(office_id.as_str())?;
+    let office_id = read_entity_id()?;
 
     println!("Enter Door id: ");
-    let door_id = read_line();
-    let door_id = EntityIdentifier::try_from(door_id.as_str())?;
+    let door_id = read_entity_id()?;
 
     let tcp = TcpTransport::create(&ctx).await?;
     tcp.connect(OFFICE_TCP_ADDRESS).await?;
@@ -48,14 +46,24 @@ async fn main(ctx: Context) -> Result<()> {
     )?;
 
     entity.present_credential(
-        route![door_channel, DOOR_WORKER_ADDRESS],
+        route![door_channel.clone(), DOOR_VERIFIER_ADDRESS],
         credential,
         reveal_attributes!["door_id", "can_open_door"],
     )?;
 
     println!("Bob presented credential!");
 
-    // TODO: Send actual payload
+    let mut child_ctx = ctx.new_context(Address::random(0)).await?;
+
+    child_ctx
+        .send(
+            route![door_channel, DOOR_CONTROLLER_ADDRESS],
+            OpenDoorMessage,
+        )
+        .await?;
+    let _ = child_ctx.receive::<DoorIsOpenedMessage>().await?;
+
+    println!("Door is opened!");
 
     Ok(())
 }

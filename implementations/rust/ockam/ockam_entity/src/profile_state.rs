@@ -149,6 +149,28 @@ impl ProfileState {
 
         Err(EntityError::CredentialNotFound.into())
     }
+
+    pub fn add_remote_credential(
+        &mut self,
+        holder: &ProfileIdentifier,
+        schema: CredentialSchema,
+        attributes_values: Vec<CredentialAttribute>,
+    ) -> Result<()> {
+        // TODO
+
+        Ok(())
+    }
+
+    pub fn check_remote_credential(
+        &mut self,
+        holder: &ProfileIdentifier,
+        schema: CredentialSchema,
+        attributes_values: Vec<CredentialAttribute>,
+    ) -> Result<bool> {
+        // TODO
+
+        Ok(true)
+    }
 }
 
 impl Identity for ProfileState {

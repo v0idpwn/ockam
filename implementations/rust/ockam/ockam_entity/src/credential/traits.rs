@@ -240,11 +240,10 @@ pub trait CredentialProtocol {
         reveal_attributes: Vec<String>,
     ) -> Result<()>;
 
-    fn verify_credential(
+    fn create_credential_verifier_listener(
         &mut self,
         address: impl Into<Address> + Send,
         issuer_id: &ProfileIdentifier,
         schema: CredentialSchema,
-        attributes_values: Vec<CredentialAttribute>,
     ) -> Result<bool>;
 }

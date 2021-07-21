@@ -1,9 +1,8 @@
-use lib::{read_line, OFFICE_ISSUER_ADDRESS, OFFICE_LISTENER_ADDRESS, OFFICE_TCP_ADDRESS};
+use lib::{read_entity_id, OFFICE_ISSUER_ADDRESS, OFFICE_LISTENER_ADDRESS, OFFICE_TCP_ADDRESS};
 use ockam::{
-    credential_type, Context, CredentialProtocol, Entity, EntityIdentifier, IdentifierTrustPolicy,
-    Identity, NoOpTrustPolicy, Profile, Result, SecureChannels, TcpTransport, Vault,
+    credential_type, Context, CredentialProtocol, Entity, IdentifierTrustPolicy, Identity,
+    NoOpTrustPolicy, Profile, Result, SecureChannels, TcpTransport, Vault,
 };
-use std::convert::TryFrom;
 
 #[ockam::node]
 async fn main(ctx: Context) -> Result<()> {
@@ -21,8 +20,7 @@ async fn main(ctx: Context) -> Result<()> {
     entity.create_secure_channel_listener(OFFICE_LISTENER_ADDRESS, NoOpTrustPolicy)?;
 
     println!("Enter Bob id: ");
-    let bob_id = read_line();
-    let bob_id = EntityIdentifier::try_from(bob_id.as_str())?;
+    let bob_id = read_entity_id()?;
 
     entity.create_credential_issuance_listener(
         OFFICE_ISSUER_ADDRESS,

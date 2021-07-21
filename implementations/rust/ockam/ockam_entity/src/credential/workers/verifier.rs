@@ -1,4 +1,4 @@
-use crate::traits::Verifier;
+use crate::traits::Verifier1;
 use crate::{
     check_message_origin, get_secure_channel_participant_id, CredentialAttribute,
     CredentialProtocolMessage, CredentialSchema, EntityError, PresentationManifest, Profile,
@@ -20,7 +20,6 @@ pub struct VerifierWorker {
     presenter_id: Option<ProfileIdentifier>,
     pubkey: SigningPublicKey,
     schema: CredentialSchema,
-    attributes_values: Vec<CredentialAttribute>,
     callback_address: Address,
 }
 
@@ -29,7 +28,6 @@ impl VerifierWorker {
         profile: Profile,
         pubkey: SigningPublicKey,
         schema: CredentialSchema,
-        attributes_values: Vec<CredentialAttribute>,
         callback_address: Address,
     ) -> Self {
         Self {
@@ -38,7 +36,6 @@ impl VerifierWorker {
             presenter_id: None,
             pubkey,
             schema,
-            attributes_values,
             callback_address,
         }
     }
@@ -54,10 +51,13 @@ impl Worker for VerifierWorker {
         ctx: &mut Self::Context,
         msg: Routed<Self::Message>,
     ) -> Result<()> {
+        let p_id;
         if let Some(presenter_id) = &self.presenter_id {
+            p_id = presenter_id.clone();
             check_message_origin(&msg, presenter_id)?;
         } else {
-            self.presenter_id = Some(get_secure_channel_participant_id(&msg)?);
+            p_id = get_secure_channel_participant_id(&msg)?;
+            self.presenter_id = Some(p_id.clone());
         }
 
         let route = msg.return_route();
@@ -79,13 +79,15 @@ impl Worker for VerifierWorker {
                 if let CredentialProtocolMessage::PresentationResponse(presentation) = msg {
                     let schema = &self.schema;
 
+                    let attributes_values = presentation.revealed_attributes.clone();
+
                     // TODO: Are attributes_values guaranteed to match values in credential after the check? Or should we perform additional checks?
                     let attributes: Vec<(String, CredentialAttribute)> = self
                         .schema
                         .attributes
                         .iter()
                         .skip(1) // FIXME: SECRET_ID
-                        .zip(self.attributes_values.iter())
+                        .zip(attributes_values.iter())
                         .map(
                             |x| (x.0.label.clone(), x.1.clone()), // TODO: Support different order in schema and attribute_values?
                         )
@@ -105,7 +107,12 @@ impl Worker for VerifierWorker {
                         id.clone(),
                     )?;
 
-                    // TODO: Add some mechanism to identify participant as an owner of the valid credential
+                    self.profile.add_remote_credential(
+                        &p_id,
+                        self.schema.clone(),
+                        attributes_values,
+                    )?;
+
                     ctx.send(self.callback_address.clone(), credential_is_valid)
                         .await?;
 

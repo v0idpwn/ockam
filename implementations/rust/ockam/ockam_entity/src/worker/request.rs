@@ -60,4 +60,6 @@ pub enum IdentityRequest {
     ),
     AddCredential(Id, EntityCredential),
     GetCredential(Id, Credential),
+    AddRemoteCredential(Id, Id, CredentialSchema, Vec<CredentialAttribute>),
+    CheckRemoteCredential(Id, Id, CredentialSchema, Vec<CredentialAttribute>),
 }

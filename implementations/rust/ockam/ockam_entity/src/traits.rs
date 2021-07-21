@@ -160,8 +160,9 @@ pub trait Holder {
     fn get_credential(&mut self, credential: &Credential) -> Result<EntityCredential>;
 }
 
+// FIXME: Rename
 /// Verifier API
-pub trait Verifier {
+pub trait Verifier1 {
     /// Create a unique proof request id so the holder must create a fresh proof
     fn create_proof_request_id(&self) -> Result<ProofRequestId>;
 
@@ -178,5 +179,19 @@ pub trait Verifier {
         presentation: &CredentialPresentation,
         presentation_manifest: &PresentationManifest,
         proof_request_id: ProofRequestId,
+    ) -> Result<bool>;
+
+    fn add_remote_credential(
+        &mut self,
+        holder: &ProfileIdentifier,
+        schema: CredentialSchema,
+        attributes_values: Vec<CredentialAttribute>,
+    ) -> Result<()>;
+
+    fn check_remote_credential(
+        &mut self,
+        holder: &ProfileIdentifier,
+        schema: CredentialSchema,
+        attributes_values: Vec<CredentialAttribute>,
     ) -> Result<bool>;
 }
