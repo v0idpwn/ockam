@@ -11,15 +11,19 @@ async fn main(mut ctx: Context) -> Result<()> {
     // Set the address of the Kafka node you created here. (e.g. "192.0.2.1:4000")
     let hub_node_tcp_address = "<Your node Address copied from hub.ockam.network>";
 
+    // Get stream names
+    let sender_name = std::env::var("SENDER").unwrap();
+    let receiver_name = std::env::var("RECEIVER").unwrap();
+
     // Create a stream client
     let (sender, _receiver) = Stream::new(&ctx)?
         .stream_service("stream_kafka")
         .index_service("stream_kafka_index")
         .client_id("stream-over-cloud-node-initiator")
         .connect(
-            route![(TCP, hub_node_tcp_address)], // route to hub
-            "initiator-to-responder",            // outgoing stream
-            "responder-to-initiator",            // incoming stream
+            route![(TCP, hub_node_tcp_address)],
+            sender_name,
+            receiver_name,
         )
         .await?;
 
@@ -29,6 +33,9 @@ async fn main(mut ctx: Context) -> Result<()> {
             sender.clone(), // via the "initiator-to-responder" stream
             "echoer"        // to the "echoer" worker
         ],
+
+    ctx.send(
+        sender.to_route().append("echoer"),
         "Hello World!".to_string(),
     )
     .await?;

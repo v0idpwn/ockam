@@ -10,3 +10,4 @@ ockam_transport_websocket = { path = "../../../implementations/rust/ockam/ockam_
 
 [dev-dependencies]
 rand = { version = "0.8.4", features = ["std_rng"] }
+uuid = { version = "0.8.2", features = ["v4"] }
