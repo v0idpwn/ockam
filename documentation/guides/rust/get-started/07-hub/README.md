@@ -55,7 +55,7 @@ use ockam::{route, Context, Result, TcpTransport, TCP};
 async fn main(mut ctx: Context) -> Result<()> {
     // Create a hub node by going to https://hub.ockam.network
 
-    let hub_node_tcp_address = "<Your node Address copied from hub.ockam.network>"; // e.g. "127.0.0.1:4000"
+    let hub_node_tcp_address = "<Your node Address copied from hub.ockam.network>"; // e.g. "my_node.ockam.network:4000"
 
     // Initialize the TCP Transport.
     let _tcp = TcpTransport::create(&ctx).await?;
