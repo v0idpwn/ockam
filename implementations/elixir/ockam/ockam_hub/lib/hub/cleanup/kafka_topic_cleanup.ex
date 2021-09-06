@@ -26,7 +26,12 @@ defmodule Ockam.Hub.Cleanup.Kafka.TopicCleanup do
   end
 
   def cleanup_topics(topics, options) do
-    Ockam.Kafka.delete_topics(topics, options)
+    case Ockam.Kafka.delete_topics(topics, options) do
+      :ok -> {:ok, topics}
+      {:ok, res} -> {:ok, topics}
+      {:error, err} ->
+        {:error, {err, topics}}
+    end
   end
 
   def idle_topic?({topic_name, partitions}, expired_time, options) do

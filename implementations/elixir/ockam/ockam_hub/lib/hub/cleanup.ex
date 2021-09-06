@@ -22,7 +22,7 @@ defmodule Ockam.Hub.Cleanup do
     Logger.info("Cleanup forwarders older than #{idle_timeout} ms")
     WorkerCleanup.cleanup_idle_workers(Ockam.Hub.Service.Forwarding.Forwarder, idle_timeout)
 
-    case cleanup_kafka_topics do
+    topic_cleanup_res = case cleanup_kafka_topics do
       true ->
         Logger.info("Cleanup kafka topics older than #{idle_timeout} ms")
         TopicCleanup.cleanup_idle_topics(idle_timeout, [])
@@ -30,5 +30,15 @@ defmodule Ockam.Hub.Cleanup do
       false ->
         :ok
     end
+
+    case topic_cleanup_res do
+      :ok -> :ok
+      {:ok, topics} ->
+        Logger.info("#{Enum.count(topics)} topics deleted")
+      {:error, error} ->
+        Logger.warn("Error deleting topics: #{inspect(error)}")
+    end
+
+    Logger.info("Cleanup finished")
   end
 end
