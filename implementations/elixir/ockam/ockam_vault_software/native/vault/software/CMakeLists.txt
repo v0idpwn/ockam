@@ -66,7 +66,7 @@ set_target_properties(ockam_vault PROPERTIES LINK_FLAGS "-dynamiclib -undefined 
 endif()
 
 if(UNIX AND NOT APPLE)
-set_target_properties(ockam_elixir_ffi PROPERTIES LINK_FLAGS "-fPIC -shared")
+set_target_properties(ockam_elixir_ffi PROPERTIES LINK_FLAGS "-fPIC -shared -Wl,-rpath,$ORIGIN")
 set_target_properties(ockam_vault PROPERTIES LINK_FLAGS "-fPIC -shared")
 endif()
 
