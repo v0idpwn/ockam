@@ -140,7 +140,7 @@ defmodule Ockam.Vault.Software.MixProject do
     {_, 0} =
       System.cmd(
         "cmake",
-        ["-S", "native", "-B", native_build_path(), "-DBUILD_SHARED_LIBS=ON"],
+        ["-S", "native", "-B", native_build_path(), "-DBUILD_SHARED_LIBS=ON", "-DCMAKE_BUILD_TYPE=Release"],
         into: IO.stream(:stdio, :line),
         env: [{"ERL_INCLUDE_DIR", erl_include_dir()}]
       )

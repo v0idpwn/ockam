@@ -22,8 +22,8 @@ add_library(ockam::ffi ALIAS ockam_ffi)
 
 file(GLOB
         FFI_LIB_PATH
-        #${CMAKE_CURRENT_LIST_DIR}/../../../../../../rust/ockam/ockam_ffi/target/release/libockam_ffi${CMAKE_STATIC_LIBRARY_SUFFIX}
-        ${CMAKE_CURRENT_LIST_DIR}/../../../../../../rust/ockam/ockam_ffi/target/debug/libockam_ffi${CMAKE_STATIC_LIBRARY_SUFFIX})
+        ${CMAKE_CURRENT_LIST_DIR}/../../../../../../rust/ockam/ockam_ffi/target/release/libockam_ffi${CMAKE_STATIC_LIBRARY_SUFFIX}
+        )
 
 file(COPY ${FFI_LIB_PATH} DESTINATION "${CMAKE_CURRENT_BINARY_DIR}")
 
@@ -44,8 +44,7 @@ target_sources(ockam_elixir_ffi PRIVATE nifs.c vault.c vault.h common.c common.h
 target_include_directories(ockam_elixir_ffi PUBLIC $ENV{ERL_INCLUDE_DIR})
 
 if(APPLE)
-set_target_properties(ockam_elixir_ffi PROPERTIES LINK_FLAGS "-dynamiclib")
-#set_target_properties(ockam_elixir_ffi PROPERTIES LINK_FLAGS "-dynamiclib -undefined dynamic_lookup")
+set_target_properties(ockam_elixir_ffi PROPERTIES LINK_FLAGS "-dynamiclib -undefined dynamic_lookup")
 endif()
 
 if(UNIX AND NOT APPLE)
