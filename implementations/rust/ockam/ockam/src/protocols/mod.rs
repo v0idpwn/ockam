@@ -1,11 +1,11 @@
 //! Advanced Ockam worker protocols
+//!
+//! This module primarily contains types and parsing utilities used in
+//! different high-level Ockam utility protocols
 
-use ockam_core::compat::vec::Vec;
-use ockam_core::{Message, ProtocolId};
+use crate::Result;
+use ockam_core::{compat::vec::Vec, Message, ProtocolId};
 use serde::{Deserialize, Serialize};
-
-mod parser;
-pub use parser::*;
 
 pub mod stream;
 
@@ -30,4 +30,27 @@ impl ProtocolPayload {
             data: d.encode().expect("Failed to serialise protocol payload"),
         }
     }
+}
+
+/// Map a `ProtocolPayload` to a protocol specific type
+///
+/// This trait should be implemented for the facade enum-type of a
+/// protocol, meaning that the usage will look something like this.
+///
+/// ```no_compile
+/// async fn handle_message(&mut self, _: &mut Context, msg: Routed<Any>) -> Result<()> {
+///     let protocol_payload = ProtocolPayload::decode(msg.payload())?;
+///     let resp = MyProtocolResponse::parse(protocol_payload)?;
+///     println!("{:?}", resp);
+///     Ok(())
+/// }
+/// ```
+pub trait ProtocolParser: Sized {
+    /// A function which checks whether this parser should be called
+    /// for a particular protocol payload.
+    ///
+    /// Internally it's recommended to use static strings and a set
+    /// operation to speed up repeated queries.
+    fn check_id<'a>(id: &'a str) -> bool;
+    fn parse(pp: ProtocolPayload) -> Result<Self>;
 }
