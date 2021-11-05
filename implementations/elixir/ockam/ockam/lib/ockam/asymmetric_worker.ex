@@ -50,7 +50,7 @@ defmodule Ockam.AsymmetricWorker do
 
       @impl true
       def setup(options, state) do
-        with {:ok, inner_address} <- register_inner_address(options) do
+        with {:ok, inner_address} <- register_inner_address(options, state) do
           inner_setup(options, Map.put(state, :inner_address, inner_address))
         end
       end
@@ -73,7 +73,12 @@ defmodule Ockam.AsymmetricWorker do
       end
 
       @doc false
-      def register_inner_address(options) do
+      def register_inner_address(_options, %{inner_address: inner_address})
+          when inner_address != nil do
+        {:ok, inner_address}
+      end
+
+      def register_inner_address(options, state) do
         case Keyword.get(options, :inner_address) do
           nil ->
             Ockam.Node.register_random_address()
@@ -110,6 +115,14 @@ defmodule Ockam.AsymmetricWorker do
 
       def inner_setup(options, state), do: {:ok, state}
 
+      def handle_inner_message(_message, _state) do
+        raise "handle_inner_message is not defined in #{__MODULE__}"
+      end
+
+      def handle_outer_message(_message, _state) do
+        raise "handle_inner_message is not defined in #{__MODULE__}"
+      end
+
       def handle_other_message(message, state) do
         {:error, {:unknown_self_address, message, state}}
       end
@@ -118,7 +131,12 @@ defmodule Ockam.AsymmetricWorker do
         {:error, {:not_ockam_message, non_message, state}}
       end
 
-      defoverridable inner_setup: 2, handle_other_message: 2, handle_non_message: 2
+      defoverridable handle_message: 2,
+                     inner_setup: 2,
+                     handle_inner_message: 2,
+                     handle_outer_message: 2,
+                     handle_other_message: 2,
+                     handle_non_message: 2
     end
   end
 end
