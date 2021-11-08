@@ -1,4 +1,4 @@
-defmodule Ockam.Session.DataWorker do
+defmodule Ockam.Examples.Session.DataWorker do
   @moduledoc false
 
   use Ockam.Worker
@@ -18,7 +18,7 @@ defmodule Ockam.Session.DataWorker do
   end
 end
 
-defmodule Ockam.Session.ForwardingDataWorker do
+defmodule Ockam.Examples.Session.ForwardingDataWorker do
   @moduledoc false
 
   use Ockam.AsymmetricWorker

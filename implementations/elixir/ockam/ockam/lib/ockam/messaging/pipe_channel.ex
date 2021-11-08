@@ -8,28 +8,7 @@ defmodule Ockam.Messaging.PipeChannel do
 
   Session setup:
 
-  Initiator is started with a route to spawner
-
-  Initiator starts a local receiver
-  Initiator sends handshake to spawner route
-  handshake message return route contains receiver address
-
-  Spawner starts a Responder with:
-  return route from the handshake message
-  Initiator address from the handshake message metadata
-
-  Responder starts a local receiver
-  Responder starts a sender using the return route of the handshake
-  Responder sends handshake response to Initiator through local sender
-  Using route: [responder_sender, initiator]
-
-  Responder Sender forwards handshake response to Initiator Receiver
-
-  Initiator Receiver forwards handshake response to Initiator
-
-  Initiator takes receiver address and responder address from the handshake response metadata
-  Initiator creates a route to Responder Receiver using receiver address and spawner route
-  Initiator creates a local sender using this route
+  See `Ockam.Messaging.PipeChannel.Handshake`
 
   Message forwarding:
 
@@ -75,7 +54,7 @@ defmodule Ockam.Messaging.PipeChannel do
   ## Outer message is forwarded through sender
   ## to other channel endpoints inner address
   def forward_outer(message, state) do
-    channel_route = Map.get(state, :channel_route)
+    channel_route = Map.fetch!(state, :channel_route)
 
     [_me | onward_route] = Message.onward_route(message)
     return_route = Message.return_route(message)
@@ -95,22 +74,14 @@ defmodule Ockam.Messaging.PipeChannel do
     {:ok, inner_address} = Ockam.Node.register_random_address()
     Map.put(state, :inner_address, inner_address)
   end
-
-  @doc false
-  def pipe_mod(options) do
-    case Keyword.fetch(options, :pipe_mod) do
-      {:ok, {sender_mod, receiver_mod}} ->
-        {:ok, {sender_mod, receiver_mod}}
-
-      {:ok, pipe_mod} when is_atom(pipe_mod) ->
-        {:ok, {pipe_mod.sender(), pipe_mod.receiver()}}
-    end
-  end
 end
 
 defmodule Ockam.Messaging.PipeChannel.Metadata do
   @moduledoc """
   Encodable data structure for pipechannel handshake metadata
+
+  `receiver_route` - local route to receiver worker
+  `channel_route` - local route to the channel worker (inner address)
   """
 
   defstruct [:receiver_route, :channel_route]
@@ -142,6 +113,11 @@ defmodule Ockam.Messaging.PipeChannel.Simple do
   Simple implementation of pipe channel.
   Does not manage the session.
   Requires a known address to the local pipe sender and remote channel end
+
+  Using two addresses for inner and outer communication.
+
+  forwards messages from outer address to the sender and remote channel
+  forwards messages from inner address to the onward route and traces own outer address in the return route
 
   Options:
 
@@ -177,131 +153,48 @@ defmodule Ockam.Messaging.PipeChannel.Initiator do
   @moduledoc """
   Pipe channel initiator.
 
-  Using two addresses for inner and outer communication.
-
-  Starts a local receiver and sends a handshake message to the remote spawner.
-  The handshake message is sent wiht a RECEIVER address in the retourn route.
-
-  In handshake stage:
-  buffers all messages received on outer address.
-  On handshake response creates a local sender using handshake metadata (receiver route) and spawner route.
-
-  In ready stage:
-  forwards messages from outer address to the sender and remote responder
-  forwards messages from inner address to the onward route and traces own outer address in the return route
+  A session initiator using `Ockam.Messaging.PipeChannel.Handshake` for handshake
+  and `Ockam.Messaging.PipeChannel.Simple` for data exchange
 
   Options:
 
-  `pipe_mod` - pipe modules to use, either {sender, receiver} or a module implementing `Ockam.Messaging.Pipe`
-  `spawner_route` - a route to responder spawner
-
+  `spawner_route` - init route for the session
+  `pipe_mod` - pipe module
+  `sender_options` - options for sender
+  `receiver_options` - options for receiver
   """
 
-  use Ockam.AsymmetricWorker
-
   alias Ockam.Messaging.PipeChannel
-  alias Ockam.Messaging.PipeChannel.Metadata
 
-  alias Ockam.Message
-  alias Ockam.Router
+  alias Ockam.Session.Routing.Pluggable, as: Session
 
-  @impl true
-  def inner_setup(options, state) do
+  def create(options) do
+    ## TODO: rename to init_route
     spawner_route = Keyword.fetch!(options, :spawner_route)
+
+    pipe_mod = Keyword.fetch!(options, :pipe_mod)
     sender_options = Keyword.get(options, :sender_options, [])
     receiver_options = Keyword.get(options, :receiver_options, [])
 
-    {:ok, {sender_mod, receiver_mod}} = PipeChannel.pipe_mod(options)
-
-    {:ok, receiver} = receiver_mod.create(receiver_options)
-
-    send_handshake(spawner_route, receiver, state)
-
-    {:ok,
-     Map.merge(state, %{
-       receiver: receiver,
-       spawner_route: spawner_route,
-       state: :handshake,
-       sender_mod: sender_mod,
-       receiver_mod: receiver_mod,
-       sender_options: sender_options
-     })}
-  end
-
-  @impl true
-  def handle_inner_message(message, %{state: :handshake} = state) do
-    payload = Message.payload(message)
-
-    %Metadata{
-      channel_route: channel_route,
-      receiver_route: remote_receiver_route
-    } = Metadata.decode(payload)
-
-    spawner_route = Map.fetch!(state, :spawner_route)
-
-    receiver_route = make_receiver_route(spawner_route, remote_receiver_route)
-
-    sender_mod = Map.get(state, :sender_mod)
-    sender_options = Map.get(state, :sender_options, [])
-
-    {:ok, sender} =
-      sender_mod.create(Keyword.merge([receiver_route: receiver_route], sender_options))
-
-    process_buffer(
-      Map.merge(state, %{
-        sender: sender,
-        channel_route: channel_route,
-        state: :ready
-      })
+    Session.Initiator.create(
+      init_route: spawner_route,
+      worker_mod: PipeChannel.Simple,
+      worker_options: [],
+      handshake: PipeChannel.Handshake,
+      handshake_options: [
+        pipe_mod: pipe_mod,
+        sender_options: sender_options,
+        receiver_options: receiver_options
+      ]
     )
   end
 
-  def handle_inner_message(message, %{state: :ready} = state) do
-    PipeChannel.forward_inner(message, state)
-    {:ok, state}
-  end
-
-  @impl true
-  def handle_outer_message(message, %{state: :handshake} = state) do
-    ## TODO: find a better solution than buffering
-    state = buffer_message(message, state)
-    {:ok, state}
-  end
-
-  def handle_outer_message(message, %{state: :ready} = state) do
-    PipeChannel.forward_outer(message, state)
-    {:ok, state}
-  end
-
-  defp process_buffer(state) do
-    buffer = Map.get(state, :buffer, [])
-
-    Enum.reduce(buffer, {:ok, state}, fn message, {:ok, state} ->
-      handle_outer_message(message, state)
-    end)
-  end
-
-  defp buffer_message(message, state) do
-    buffer = Map.get(state, :buffer, [])
-    Map.put(state, :buffer, buffer ++ [message])
-  end
-
-  defp make_receiver_route(spawner_route, remote_receiver_route) do
-    Enum.take(spawner_route, Enum.count(spawner_route) - 1) ++ remote_receiver_route
-  end
-
-  defp send_handshake(spawner_route, receiver, state) do
-    msg = %{
-      onward_route: spawner_route,
-      return_route: [receiver],
-      payload:
-        Metadata.encode(%Metadata{
-          channel_route: [state.inner_address],
-          receiver_route: [receiver]
-        })
-    }
-
-    Router.route(msg)
+  ## TODO: solve duplication with Session.Initiator.create_and_wait
+  def create_and_wait(options, interval \\ 50, timeout \\ 5000) do
+    with {:ok, address} <- create(options),
+         :ok <- Session.Initiator.wait_for_session(address, interval, timeout) do
+      {:ok, address}
+    end
   end
 end
 
@@ -309,87 +202,35 @@ defmodule Ockam.Messaging.PipeChannel.Responder do
   @moduledoc """
   Pipe channel responder
 
-  Using two addresses for inner and outer communication.
-
-  Created with remote receiver route and channel route
-
-  On start:
-  creates a local receiver
-  creates a sender for a remote receiver route
-  sends a channel handshake confirmation through the sender
-  confirmation contains local receiver address and responder inner address
-
-  forwards messages from outer address through the sender and remote initiator
-  forwards messages from inner address and traces own outer address in the return route
+  A session responder using `Ockam.Messaging.PipeChannel.Handshake` for handshake
+  and `Ockam.Messaging.PipeChannel.Simple` for data exchange
 
   Options:
 
-  `pipe_mod` - pipe modules to use, either {sender, receiver} or an atom namespace, which has .Sender and .Receiver (e.g. `Ockam.Messaging.Ordering.Monotonic.IndexPipe`)
-  `receiver_route` - route to the receiver on the initiator side, used to create a sender
-  `channel_route` - route from initiator receiver to initiator, used in forwarding
+  `pipe_mod` - pipe module
+  `sender_options` - options for sender
+  `receiver_options` - options for receiver
   """
 
-  use Ockam.AsymmetricWorker
-
   alias Ockam.Messaging.PipeChannel
-  alias Ockam.Messaging.PipeChannel.Metadata
 
-  alias Ockam.Router
+  def create(options) do
+    init_message = Keyword.get(options, :init_message)
 
-  require Logger
-
-  @impl true
-  def inner_setup(options, state) do
-    receiver_route = Keyword.fetch!(options, :receiver_route)
-    channel_route = Keyword.fetch!(options, :channel_route)
+    pipe_mod = Keyword.fetch!(options, :pipe_mod)
     sender_options = Keyword.get(options, :sender_options, [])
     receiver_options = Keyword.get(options, :receiver_options, [])
 
-    {:ok, {sender_mod, receiver_mod}} = PipeChannel.pipe_mod(options)
-
-    {:ok, receiver} = receiver_mod.create(receiver_options)
-
-    {:ok, sender} =
-      sender_mod.create(Keyword.merge([receiver_route: receiver_route], sender_options))
-
-    send_handshake_response(receiver, sender, channel_route, state)
-
-    {:ok,
-     Map.merge(state, %{
-       receiver: receiver,
-       sender: sender,
-       channel_route: channel_route,
-       sender_mod: sender_mod,
-       receiver_mod: receiver_mod
-     })}
-  end
-
-  @impl true
-  def handle_inner_message(message, state) do
-    PipeChannel.forward_inner(message, state)
-    {:ok, state}
-  end
-
-  @impl true
-  def handle_outer_message(message, state) do
-    PipeChannel.forward_outer(message, state)
-    {:ok, state}
-  end
-
-  defp send_handshake_response(receiver, sender, channel_route, state) do
-    msg = %{
-      onward_route: [sender | channel_route],
-      return_route: [state.inner_address],
-      payload:
-        Metadata.encode(%Metadata{
-          channel_route: [state.inner_address],
-          receiver_route: [receiver]
-        })
-    }
-
-    # Logger.info("Handshake response #{inspect(msg)}")
-
-    Router.route(msg)
+    Ockam.Session.Routing.Pluggable.Responder.create(
+      init_message: init_message,
+      worker_mod: PipeChannel.Simple,
+      handshake: PipeChannel.Handshake,
+      handshake_options: [
+        pipe_mod: pipe_mod,
+        sender_options: sender_options,
+        receiver_options: receiver_options
+      ]
+    )
   end
 end
 
@@ -405,35 +246,13 @@ defmodule Ockam.Messaging.PipeChannel.Spawner do
 
   `responder_options` - additional options to pass to the responder
   """
-  use Ockam.Worker
 
-  alias Ockam.Messaging.PipeChannel.Metadata
-  alias Ockam.Messaging.PipeChannel.Responder
-
-  alias Ockam.Message
-
-  require Logger
-
-  @impl true
-  def setup(options, state) do
+  def create(options) do
     responder_options = Keyword.fetch!(options, :responder_options)
-    {:ok, Map.put(state, :responder_options, responder_options)}
-  end
 
-  @impl true
-  def handle_message(message, state) do
-    return_route = Message.return_route(message)
-    payload = Message.payload(message)
-
-    ## We ignore receiver route here and rely on return route tracing
-    %Metadata{channel_route: channel_route} = Metadata.decode(payload)
-
-    responder_options = Map.get(state, :responder_options)
-
-    Responder.create(
-      Keyword.merge(responder_options, receiver_route: return_route, channel_route: channel_route)
+    Ockam.Session.Spawner.create(
+      worker_mod: Ockam.Messaging.PipeChannel.Responder,
+      worker_options: responder_options
     )
-
-    {:ok, state}
   end
 end
