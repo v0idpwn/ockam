@@ -166,7 +166,7 @@ defmodule Ockam.Messaging.PipeChannel.Initiator do
 
   alias Ockam.Messaging.PipeChannel
 
-  alias Ockam.Session.Routing.Pluggable, as: Session
+  alias Ockam.Session.Separate, as: Session
 
   def create(options) do
     ## TODO: rename to init_route
@@ -214,6 +214,8 @@ defmodule Ockam.Messaging.PipeChannel.Responder do
 
   alias Ockam.Messaging.PipeChannel
 
+  alias Ockam.Session.Separate, as: Session
+
   def create(options) do
     init_message = Keyword.get(options, :init_message)
 
@@ -221,7 +223,7 @@ defmodule Ockam.Messaging.PipeChannel.Responder do
     sender_options = Keyword.get(options, :sender_options, [])
     receiver_options = Keyword.get(options, :receiver_options, [])
 
-    Ockam.Session.Routing.Pluggable.Responder.create(
+    Session.Responder.create(
       init_message: init_message,
       worker_mod: PipeChannel.Simple,
       handshake: PipeChannel.Handshake,

@@ -117,27 +117,39 @@ defmodule Ockam.Session.Routing.Pluggable.Initiator do
     handshake = Keyword.get(options, :handshake, Ockam.Session.Handshake.Default)
     handshake_options = Keyword.get(options, :handshake_options, [])
 
+    handshake_state = %{
+      init_route: init_route,
+      outer_address: state.address,
+      inner_address: state.inner_address,
+      handshake_address: state.inner_address
+    }
+
     state =
       Map.merge(state, %{
-        init_route: init_route,
         worker_mod: worker_mod,
         worker_options: worker_options,
-        base_state: base_state,
-        handshake: handshake,
-        handshake_options: handshake_options
+        base_state: base_state
       })
 
-    state = send_handshake(handshake_options, state)
+    handshake_state = send_handshake(handshake, handshake_options, handshake_state)
 
-    {:ok, Map.put(state, :stage, :handshake)}
+    state =
+      Map.merge(state, %{
+        handshake: handshake,
+        handshake_options: handshake_options,
+        handshake_state: handshake_state,
+        stage: :handshake
+      })
+
+    {:ok, state}
   end
 
-  def send_handshake(handshake_options, state) do
-    handshake = Map.fetch!(state, :handshake)
-    {:ok, handshake_msg, state} = handshake.init(handshake_options, state)
+  def send_handshake(handshake, handshake_options, handshake_state) do
+    {:ok, handshake_msg, handshake_state} = handshake.init(handshake_options, handshake_state)
     Logger.info("handshake_msg: #{inspect(handshake_msg)}")
     Ockam.Router.route(handshake_msg)
-    state
+
+    handshake_state
   end
 
   @impl true
@@ -164,10 +176,11 @@ defmodule Ockam.Session.Routing.Pluggable.Initiator do
   def handle_handshake_message(message, state) do
     handshake = Map.fetch!(state, :handshake)
     handshake_options = Map.fetch!(state, :handshake_options)
+    handshake_state = Map.fetch!(state, :handshake_state)
 
-    case handshake.handle_initiator(handshake_options, message, state) do
-      {:ok, options, state} ->
-        switch_to_data_stage(options, state)
+    case handshake.handle_initiator(handshake_options, message, handshake_state) do
+      {:ok, options, handshake_state} ->
+        switch_to_data_stage(options, handshake_state, state)
 
       {:error, err} ->
         ## TODO: error handling in Ockam.Worker
@@ -175,7 +188,7 @@ defmodule Ockam.Session.Routing.Pluggable.Initiator do
     end
   end
 
-  def switch_to_data_stage(handshake_options, state) do
+  def switch_to_data_stage(handshake_options, handshake_state, state) do
     base_state = Map.get(state, :base_state)
     worker_mod = Map.fetch!(state, :worker_mod)
     worker_options = Map.fetch!(state, :worker_options)
@@ -184,10 +197,16 @@ defmodule Ockam.Session.Routing.Pluggable.Initiator do
 
     case worker_mod.setup(options, base_state) do
       {:ok, data_state} ->
-        {:ok, Map.merge(state, %{data_state: data_state, stage: :data})}
+        {:ok,
+         Map.merge(state, %{
+           data_state: data_state,
+           handshake_state: handshake_state,
+           stage: :data
+         })}
 
       {:error, err} ->
-        {:stop, {:cannot_start_data_worker, {:error, err}, options, base_state}, state}
+        {:stop, {:cannot_start_data_worker, {:error, err}, options, handshake_state, base_state},
+         state}
     end
   end
 end
@@ -242,6 +261,12 @@ defmodule Ockam.Session.Routing.Pluggable.Responder do
     handshake = Keyword.get(options, :handshake, Ockam.Session.Handshake.Default)
     handshake_options = Keyword.get(options, :handshake_options, [])
 
+    handshake_state = %{
+      outer_address: state.address,
+      inner_address: state.inner_address,
+      handshake_address: state.inner_address
+    }
+
     state =
       Map.merge(state, %{
         worker_mod: worker_mod,
@@ -249,7 +274,8 @@ defmodule Ockam.Session.Routing.Pluggable.Responder do
         base_state: base_state,
         stage: :handshake,
         handshake: handshake,
-        handshake_options: handshake_options
+        handshake_options: handshake_options,
+        handshake_state: handshake_state
       })
 
     case Keyword.get(options, :init_message) do
@@ -282,17 +308,18 @@ defmodule Ockam.Session.Routing.Pluggable.Responder do
   def handle_handshake_message(message, state) do
     handshake = Map.fetch!(state, :handshake)
     handshake_options = Map.fetch!(state, :handshake_options)
+    handshake_state = Map.fetch!(state, :handshake_state)
 
-    case handshake.handle_responder(handshake_options, message, state) do
-      {:ok, response, options, state} ->
-        switch_to_data_stage(response, options, state)
+    case handshake.handle_responder(handshake_options, message, handshake_state) do
+      {:ok, response, options, handshake_state} ->
+        switch_to_data_stage(response, options, handshake_state, state)
 
       {:error, err} ->
         {:error, err}
     end
   end
 
-  defp switch_to_data_stage(response, handshake_options, state) do
+  defp switch_to_data_stage(response, handshake_options, handshake_state, state) do
     worker_mod = Map.fetch!(state, :worker_mod)
     worker_options = Map.fetch!(state, :worker_options)
     base_state = Map.fetch!(state, :base_state)
@@ -303,7 +330,12 @@ defmodule Ockam.Session.Routing.Pluggable.Responder do
       {:ok, data_state} ->
         send_handshake_response(response)
         ## TODO: use data_state instead of state futher on?
-        {:ok, Map.merge(state, %{data_state: data_state, stage: :data})}
+        {:ok,
+         Map.merge(state, %{
+           data_state: data_state,
+           handshake_state: handshake_state,
+           stage: :data
+         })}
 
       {:error, err} ->
         Logger.error(

@@ -23,8 +23,11 @@ defmodule Ockam.Messaging.PipeChannel.Handshake do
   alias Ockam.Message
   alias Ockam.Messaging.PipeChannel.Metadata
 
+  require Logger
+
   @spec init(Keyword.t(), map()) :: {:ok, Message.t(), map()}
   def init(handshake_options, state) do
+    Logger.info("Handshake init #{inspect(handshake_options)} #{inspect(state)}")
     spawner_route = Map.fetch!(state, :init_route)
 
     pipe_mod = Keyword.fetch!(handshake_options, :pipe_mod)
@@ -35,7 +38,7 @@ defmodule Ockam.Messaging.PipeChannel.Handshake do
 
     handshake_msg = %{
       onward_route: spawner_route,
-      return_route: [receiver],
+      return_route: [state.handshake_address],
       payload:
         Metadata.encode(%Metadata{
           channel_route: [state.inner_address],
@@ -73,9 +76,12 @@ defmodule Ockam.Messaging.PipeChannel.Handshake do
     payload = Message.payload(message)
 
     ## We ignore receiver route here and rely on return route tracing
-    %Metadata{channel_route: channel_route} = Metadata.decode(payload)
+    %Metadata{channel_route: channel_route, receiver_route: remote_receiver_route} =
+      Metadata.decode(payload)
 
-    receiver_route = Message.return_route(message)
+    return_route = Message.return_route(message)
+
+    receiver_route = make_receiver_route(return_route, remote_receiver_route)
 
     sender_options = Keyword.get(handshake_options, :sender_options, [])
     receiver_options = Keyword.get(handshake_options, :receiver_options, [])
@@ -90,8 +96,8 @@ defmodule Ockam.Messaging.PipeChannel.Handshake do
       sender_mod.create(Keyword.merge([receiver_route: receiver_route], sender_options))
 
     response = %{
-      onward_route: [sender | channel_route],
-      return_route: [state.inner_address],
+      onward_route: return_route,
+      return_route: [state.handshake_address],
       payload:
         Metadata.encode(%Metadata{
           channel_route: [state.inner_address],

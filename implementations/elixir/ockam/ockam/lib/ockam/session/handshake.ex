@@ -6,8 +6,15 @@ defmodule Ockam.Session.Handshake do
   """
   @type message() :: Ockam.Message.t()
 
-  @callback init(options :: Keyword.t(), state :: map()) ::
-              {:ok, message(), state :: map()} | {:error, any()}
+  @type handshake_state() :: %{
+          :init_route => Ockam.Address.route(),
+          :outer_address => Ockam.Address.t(),
+          :inner_address => Ockam.Address.t(),
+          any() => any()
+        }
+
+  @callback init(options :: Keyword.t(), state :: handshake_state()) ::
+              {:ok, message(), state :: handshake_state()} | {:error, any()}
 
   ## TODO: non-terminating handshake support
   ## TODO: error result
@@ -15,13 +22,14 @@ defmodule Ockam.Session.Handshake do
   @callback handle_initiator(
               handshake_options :: Keyword.t(),
               message :: message(),
-              state :: map()
+              state :: handshake_state()
             ) ::
-              {:ok, worker_options :: Keyword.t(), state :: map()}
+              {:ok, worker_options :: Keyword.t(), state :: handshake_state()}
   @callback handle_responder(
               handshake_options :: Keyword.t(),
               message :: message(),
-              state :: map()
+              state :: handshake_state()
             ) ::
-              {:ok, response :: message(), worker_options :: Keyword.t(), state :: map()}
+              {:ok, response :: message(), worker_options :: Keyword.t(),
+               state :: handshake_state()}
 end

@@ -5,7 +5,7 @@ defmodule Ockam.Examples.Session.PipeChannel do
   to create a pipe channel
   """
 
-  alias Ockam.Session.Routing.Pluggable, as: Session
+  alias Ockam.Session.Separate, as: Session
   alias Ockam.Session.Spawner
 
   alias Ockam.Messaging.Delivery.ResendPipe
