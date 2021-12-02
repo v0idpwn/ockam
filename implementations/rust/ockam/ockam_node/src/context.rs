@@ -234,12 +234,15 @@ impl Context {
     pub async fn stop_now(&mut self) -> Result<()> {
         let tx = self.sender.clone();
         info!("Immediately shutting down all workers");
-        let (msg, _) = NodeMessage::stop_node(ShutdownType::Immediate);
+        let (msg, mut rx) = NodeMessage::stop_node(ShutdownType::Immediate);
 
-        match tx.send(msg).await {
-            Ok(()) => Ok(()),
-            Err(_e) => Err(Error::FailedStopNode.into()),
-        }
+        tx.send(msg).await.map_err(|_| Error::FailedStopNode)?;
+
+        Ok(rx
+            .recv()
+            .await
+            .ok_or(Error::InternalIOFailure)?
+            .map(|_| ())?)
     }
 
     /// Signal to the local runtime to shut down
