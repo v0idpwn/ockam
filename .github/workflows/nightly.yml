@@ -1,0 +1,35 @@
+name: Rust Nightly
+
+permissions:
+  contents: read
+
+on:
+  workflow_dispatch:
+    inputs:
+      commit_sha:
+        description: Commit SHA to test nightly
+  schedule:
+    - cron: '0 1 * * *'
+
+jobs:
+  nightly_test:
+    runs-on: ubuntu-20.04
+    container:
+      image: ghcr.io/ockam-network/ockam/builder@sha256:e874d5c6323736e18c666aa26d15188b17f2342fee41bf20bdff463ace9bc4ae
+    steps:
+      - uses: actions/checkout@ec3a7ce113134d7a93b817d10a8272cb61118579
+        with:
+          ref: ${{ github.event.inputs.commit_sha }}
+      - uses: ./.github/actions/gradle_cache
+      - uses: ./.github/actions/cargo_home_cache
+      - uses: ./.github/actions/cargo_target_dir_cache
+      - name: Default Toolchain To Nightly
+        run: rustup default nightly
+      - name: Run Cargo Check
+        run: cd implementations/rust && ../../gradlew lint_cargo_fmt_check
+      - name: Run Cargo Build
+        run: cd implementations/rust && ../../gradlew build
+      - name: Run Cargo Test
+        run: cd implementations/rust && ../../gradlew test
+      - name: Run Cargo Clippy
+        run: cd implementations/rust && ../../gradlew lint_cargo_clippy
