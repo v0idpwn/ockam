@@ -4,11 +4,11 @@ use crate::IdentityCredentialRequest::*;
 use crate::{
     BbsCredential, Credential, CredentialAttribute, CredentialFragment1, CredentialFragment2,
     CredentialOffer, CredentialPresentation, CredentialProof, CredentialProtocol,
-    CredentialPublicKey, CredentialRequest, CredentialRequestFragment, CredentialSchema, Entity,
+    CredentialPublicKey, CredentialRequest, CredentialRequestFragment, CredentialSchema,
     EntityCredential, Holder, HolderWorker, Identity, IdentityCredentialResponse, IdentityRequest,
     IdentityResponse, Issuer, ListenerWorker, OfferId, PresentationFinishedMessage,
-    PresentationManifest, PresenterWorker, ProfileIdentifier, ProofRequestId, SigningPublicKey,
-    TrustPolicy, TrustPolicyImpl, VerifierWorker,
+    PresentationManifest, PresenterWorker, Profile, ProfileIdentifier, ProofRequestId,
+    SigningPublicKey, TrustPolicy, TrustPolicyImpl, VerifierWorker,
 };
 use core::convert::TryInto;
 use ockam_core::{async_trait, compat::boxed::Box};
@@ -22,7 +22,7 @@ fn err<T>() -> Result<T> {
 }
 
 #[async_trait]
-impl Issuer for Entity {
+impl Issuer for Profile {
     async fn get_signing_key(&mut self) -> Result<SecretKey> {
         // FIXME: Clone on every call
         let profile = self
@@ -176,7 +176,7 @@ impl Issuer for Entity {
 }
 
 #[async_trait]
-impl Holder for Entity {
+impl Holder for Profile {
     async fn accept_credential_offer(
         &self,
         offer: &CredentialOffer,
@@ -339,7 +339,7 @@ impl Holder for Entity {
 }
 
 #[async_trait]
-impl Verifier for Entity {
+impl Verifier for Profile {
     async fn create_proof_request_id(&self) -> Result<ProofRequestId> {
         let profile = self
             .current_profile()
@@ -423,7 +423,7 @@ impl Verifier for Entity {
 }
 
 #[async_trait]
-impl CredentialProtocol for Entity {
+impl CredentialProtocol for Profile {
     async fn create_credential_issuance_listener(
         &mut self,
         address: Address,
