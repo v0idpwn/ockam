@@ -1,8 +1,8 @@
-// use human_panic::setup_panic;
 use log::{debug, info, trace, warn};
 use ockam_command::{config::AppConfig, console::Console, AppError};
 use std::time::Duration;
 
+use human_panic::setup_panic;
 use ockam_command::command::CommandResult;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -15,7 +15,7 @@ struct App {
 impl Default for App {
     fn default() -> Self {
         Self::load_environment();
-        // Self::init_logging();
+        Self::init_logging();
 
         Self {
             console: Console::default(),
@@ -29,27 +29,11 @@ impl App {
         dotenv::dotenv().ok();
     }
 
-    // FIXME: stderrlog depends on chrono, triggers:
-    // - https://rustsec.org/advisories/RUSTSEC-2020-0159
-    // - https://rustsec.org/advisories/RUSTSEC-2020-0071
-    #[cfg(any())]
     pub fn init_logging() {
         setup_panic!();
 
-        // stderrlog uses usize for verbosity instead of LevelFilter enum for some silly reason
-        let mut verbosity = 2; // matches to LevelFilter::Info;
-
-        if std::env::var("DEBUG").is_ok() {
-            verbosity = 3; // Bump up to LevelFilter::Debug;
-        }
-
-        if std::env::var("TRACE").is_ok() {
-            verbosity = 4; // Bump up to LevelFilter::Trace;
-        }
-
-        if let Err(e) = stderrlog::new().verbosity(verbosity).init() {
-            panic!("Failed to initialize logging: {}", e);
-        };
+        // TODO: Clashing with ockam logging
+        // env_logger::init();
     }
 
     fn run(&mut self) -> Result<CommandResult, AppError> {
@@ -71,7 +55,8 @@ impl App {
     }
 }
 
-fn main() {
+#[ockam::node]
+async fn main(mut ctx: ockam::Context) {
     let mut app = App::default();
 
     let _command_result = match app.run() {
@@ -88,4 +73,5 @@ fn main() {
         trace!("trace");
         std::thread::sleep(Duration::from_secs(1))
     }
+    ctx.stop().await.unwrap();
 }

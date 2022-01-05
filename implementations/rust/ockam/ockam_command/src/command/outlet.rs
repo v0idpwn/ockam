@@ -1,7 +1,7 @@
 use crate::command::{CommandResult, Run};
 use crate::spinner::Spinner;
 use crate::AppError;
-use clap::ArgMatches;
+use clap::{App, ArgMatches, Subcommand};
 use comfy_table::Table;
 use log::{error, info};
 use std::time::Duration;
@@ -17,12 +17,13 @@ impl Run for OutletCommand {
 
         let args = args.unwrap();
 
-        let (subcommand, sub_args) = args.subcommand();
+        /*        let (subcommand, sub_args) = args.subcommand();
 
         match subcommand {
             "create" => self.create(sub_args),
             _ => Err(AppError::InvalidCommand),
-        }
+        }*/
+        Err(AppError::Unknown)
     }
 }
 
