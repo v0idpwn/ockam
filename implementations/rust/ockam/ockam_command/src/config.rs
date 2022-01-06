@@ -1,7 +1,9 @@
-use crate::command::CommandResult;
+use crate::command::outlet::OutletCommand;
+use crate::config::OckamCommand::Outlet;
 use crate::AppError;
 use clap::Parser;
 use log::{debug, info, warn};
+use ockam::Context;
 
 #[derive(Parser)]
 #[clap(about, version, author)]
@@ -13,12 +15,22 @@ struct Args {
     secrets: String,
 
     #[clap(subcommand)]
-    command: Option<OckamCommand>,
+    command: OckamCommand,
 }
 
 #[derive(clap::Subcommand)]
 enum OckamCommand {
-    Outlet,
+    Outlet {
+        #[clap(short, long)]
+        listen: String,
+
+        #[clap(short, long, default_value = "outlet")]
+        name: String,
+        #[clap(short, long)]
+        target: String,
+    },
+
+    Inlet {},
 }
 
 const OCKAM_ENV_PREFIX: &str = "OCKAM";
@@ -26,7 +38,7 @@ const OCKAM_ENV_PREFIX: &str = "OCKAM";
 pub struct AppConfig {}
 
 impl AppConfig {
-    pub fn evaluate() -> Result<CommandResult, AppError> {
+    pub async fn evaluate(ctx: &Context) -> Result<(), AppError> {
         let mut config = config::Config::default();
 
         let args = Args::parse();
@@ -47,15 +59,13 @@ impl AppConfig {
             .merge(config::Environment::with_prefix(OCKAM_ENV_PREFIX))
             .ok();
 
-        /*
-
-
-
-
-            let (command_name, command_args) = args.subcommand();
-            let mut command: Command = command_name.parse()?;
-            command.run(command_args)
-        */
-        Err(AppError::Unknown)
+        match &args.command {
+            Outlet {
+                listen,
+                name,
+                target,
+            } => OutletCommand::run(ctx, listen, name, target).await,
+            Inlet => Ok(()),
+        }
     }
 }

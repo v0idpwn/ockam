@@ -3,7 +3,6 @@ use ockam_command::{config::AppConfig, console::Console, AppError};
 use std::time::Duration;
 
 use human_panic::setup_panic;
-use ockam_command::command::CommandResult;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
@@ -36,7 +35,7 @@ impl App {
         // env_logger::init();
     }
 
-    fn run(&mut self) -> Result<CommandResult, AppError> {
+    async fn run(&mut self, mut ctx: ockam::Context) -> Result<(), AppError> {
         let shutdown = self.shutdown.clone();
 
         let ctrlc_set = ctrlc::set_handler(move || {
@@ -47,7 +46,17 @@ impl App {
             warn!("Failed to set Ctrl-C handler");
         }
 
-        AppConfig::evaluate()
+        AppConfig::evaluate(&ctx).await?;
+
+        while !self.is_shutdown() {
+            info!("doing stuff");
+            debug!("debug");
+            trace!("trace");
+            std::thread::sleep(Duration::from_secs(1))
+        }
+
+        ctx.stop().await.unwrap();
+        Ok(())
     }
 
     fn is_shutdown(&self) -> bool {
@@ -56,22 +65,7 @@ impl App {
 }
 
 #[ockam::node]
-async fn main(mut ctx: ockam::Context) {
+async fn main(ctx: ockam::Context) {
     let mut app = App::default();
-
-    let _command_result = match app.run() {
-        Ok(command) => command,
-        Err(error) => {
-            app.console.error(&error);
-            std::process::exit(exitcode::SOFTWARE)
-        }
-    };
-
-    while !app.is_shutdown() {
-        info!("doing stuff");
-        debug!("debug");
-        trace!("trace");
-        std::thread::sleep(Duration::from_secs(1))
-    }
-    ctx.stop().await.unwrap();
+    app.run(ctx).await.unwrap();
 }
