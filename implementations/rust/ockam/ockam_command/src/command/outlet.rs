@@ -1,10 +1,7 @@
 use crate::spinner::Spinner;
 use crate::AppError;
-use clap::{App, ArgMatches, Subcommand};
 use comfy_table::Table;
-use log::{error, info};
 use ockam::{Context, TcpTransport};
-use std::time::Duration;
 
 pub struct OutletCommand {}
 
@@ -23,7 +20,7 @@ impl OutletCommand {
 
         tcp.listen(listen).await.unwrap();
 
-        spinner.stop("Done");
+        spinner.stop("Created outlet");
 
         let mut table = Table::new();
         table

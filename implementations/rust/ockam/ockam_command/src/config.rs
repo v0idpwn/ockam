@@ -1,9 +1,10 @@
 use crate::command::outlet::OutletCommand;
-use crate::config::OckamCommand::Outlet;
+use crate::config::OckamCommand::{Inlet, Outlet};
 use crate::AppError;
 use clap::Parser;
-use log::{debug, info, warn};
+use log::{debug, info};
 use ockam::Context;
+use crate::command::inlet::InletCommand;
 
 #[derive(Parser)]
 #[clap(about, version, author)]
@@ -30,7 +31,16 @@ enum OckamCommand {
         target: String,
     },
 
-    Inlet {},
+    Inlet {
+        #[clap(short, long)]
+        listen: String,
+
+        #[clap(short, long)]
+        outlet: String,
+
+        #[clap(short, long, default_value = "outlet")]
+        name_outlet: String,
+    },
 }
 
 const OCKAM_ENV_PREFIX: &str = "OCKAM";
@@ -65,7 +75,11 @@ impl AppConfig {
                 name,
                 target,
             } => OutletCommand::run(ctx, listen, name, target).await,
-            Inlet => Ok(()),
+            Inlet {
+                listen,
+                outlet,
+                name_outlet: outlet_name
+            } => InletCommand::run(ctx, listen, outlet, outlet_name).await,
         }
     }
 }

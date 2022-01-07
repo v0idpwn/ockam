@@ -1,6 +1,5 @@
 pub mod command;
 pub mod config;
-pub mod console;
 pub mod spinner;
 
 pub use thiserror::Error;

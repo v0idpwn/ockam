@@ -1,5 +1,5 @@
 use log::{debug, info, trace, warn};
-use ockam_command::{config::AppConfig, console::Console, AppError};
+use ockam_command::{config::AppConfig, AppError};
 use std::time::Duration;
 
 use human_panic::setup_panic;
@@ -7,7 +7,6 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 struct App {
-    console: Console,
     shutdown: Arc<AtomicBool>,
 }
 
@@ -17,7 +16,6 @@ impl Default for App {
         Self::init_logging();
 
         Self {
-            console: Console::default(),
             shutdown: Arc::new(AtomicBool::default()),
         }
     }
@@ -49,9 +47,6 @@ impl App {
         AppConfig::evaluate(&ctx).await?;
 
         while !self.is_shutdown() {
-            info!("doing stuff");
-            debug!("debug");
-            trace!("trace");
             std::thread::sleep(Duration::from_secs(1))
         }
 
